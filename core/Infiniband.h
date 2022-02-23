@@ -14,27 +14,20 @@
  *
  */
 
-#ifndef CEPH_INFINIBAND_H
-#define CEPH_INFINIBAND_H
+#ifndef CORE_INFINIBAND_H
+#define CORE_INFINIBAND_H
 
-#include <boost/pool/pool.hpp>
-// need this because boost messes with ceph log/assert definitions
 #include <infiniband/verbs.h>
 #include <rdma/rdma_cma.h>
 
 #include <atomic>
+#include <boost/pool/pool.hpp>
 #include <functional>
 #include <string>
 #include <vector>
 
-#include "common/ceph_mutex.h"
-#include "common/debug.h"
-#include "common/errno.h"
-#include "common/perf_counters.h"
-#include "include/common_fwd.h"
-#include "include/int_types.h"
-#include "include/kassert.h"
-#include "include/page.h"
+#include "include/common.h"
+#include "include/perf_counters.h"
 #include "include/scope_guard.h"
 #include "msg/async/net_handler.h"
 #include "msg/msg_types.h"
