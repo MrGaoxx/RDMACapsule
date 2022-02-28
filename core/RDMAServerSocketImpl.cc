@@ -19,7 +19,6 @@
 #include "include/sock_compat.h"
 #include "msg/async/net_handler.h"
 
-#define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAServerSocketImpl "
 

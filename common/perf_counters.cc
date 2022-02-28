@@ -13,11 +13,9 @@
  *
  */
 
-#include "common/perf_counters.h"
+#include "perf_counters.h"
 
-#include "common/dout.h"
-#include "common/valgrind.h"
-#include "include/common_fwd.h"
+#include "common.h"
 
 using std::make_pair;
 using std::ostringstream;
@@ -137,7 +135,7 @@ PerfCounters::~PerfCounters() {}
 
 void PerfCounters::inc(int idx, uint64_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return;
+    if (!m_config->_conf->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -155,7 +153,7 @@ void PerfCounters::inc(int idx, uint64_t amt) {
 
 void PerfCounters::dec(int idx, uint64_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return;
+    if (!m_config->_conf->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -168,7 +166,7 @@ void PerfCounters::dec(int idx, uint64_t amt) {
 
 void PerfCounters::set(int idx, uint64_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return;
+    if (!m_config->_conf->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -188,7 +186,7 @@ void PerfCounters::set(int idx, uint64_t amt) {
 
 uint64_t PerfCounters::get(int idx) const {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return 0;
+    if (!m_config->_conf->perf) return 0;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -200,7 +198,7 @@ uint64_t PerfCounters::get(int idx) const {
 
 void PerfCounters::tinc(int idx, utime_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return;
+    if (!m_config->_conf->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -216,9 +214,9 @@ void PerfCounters::tinc(int idx, utime_t amt) {
     }
 }
 
-void PerfCounters::tinc(int idx, ceph::timespan amt) {
+void PerfCounters::tinc(int idx, common::timespan amt) {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return;
+    if (!m_config->_conf->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -236,7 +234,7 @@ void PerfCounters::tinc(int idx, ceph::timespan amt) {
 
 void PerfCounters::tset(int idx, utime_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return;
+    if (!m_config->_conf->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -249,7 +247,7 @@ void PerfCounters::tset(int idx, utime_t amt) {
 
 utime_t PerfCounters::tget(int idx) const {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return utime_t();
+    if (!m_config->_conf->perf) return utime_t();
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -262,7 +260,7 @@ utime_t PerfCounters::tget(int idx) const {
 
 void PerfCounters::hinc(int idx, int64_t x, int64_t y) {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return;
+    if (!m_config->_conf->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -277,7 +275,7 @@ void PerfCounters::hinc(int idx, int64_t x, int64_t y) {
 
 pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const {
 #ifndef WITH_SEASTAR
-    if (!m_cct->_conf->perf) return make_pair(0, 0);
+    if (!m_config->_conf->perf) return make_pair(0, 0);
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -406,8 +404,8 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema, bool histog
 
 const std::string &PerfCounters::get_name() const { return m_name; }
 
-PerfCounters::PerfCounters(CephContext *cct, const std::string &name, int lower_bound, int upper_bound)
-    : m_cct(cct),
+PerfCounters::PerfCounters(Configure *config, const std::string &name, int lower_bound, int upper_bound)
+    : m_config(config),
       m_lower_bound(lower_bound),
       m_upper_bound(upper_bound),
       m_name(name)
@@ -420,8 +418,8 @@ PerfCounters::PerfCounters(CephContext *cct, const std::string &name, int lower_
     m_data.resize(upper_bound - lower_bound - 1);
 }
 
-PerfCountersBuilder::PerfCountersBuilder(CephContext *cct, const std::string &name, int first, int last)
-    : m_perf_counters(new PerfCounters(cct, name, first, last)) {}
+PerfCountersBuilder::PerfCountersBuilder(Configure *config, const std::string &name, int first, int last)
+    : m_perf_counters(new PerfCounters(config, name, first, last)) {}
 
 PerfCountersBuilder::~PerfCountersBuilder() {
     if (m_perf_counters) delete m_perf_counters;

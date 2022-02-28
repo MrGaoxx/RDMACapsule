@@ -29,7 +29,7 @@
 //#include "include/utime.h"
 
 namespace common::PerfCounter {
-class CephContext;
+class Configure;
 class PerfCountersBuilder;
 class PerfCounters;
 }  // namespace common::PerfCounter
@@ -56,7 +56,7 @@ enum class unit_t : uint8_t { UNIT_BYTES, UNIT_NONE };
 namespace common::PerfCounter {
 class PerfCountersBuilder {
    public:
-    PerfCountersBuilder(CephContext *cct, const std::string &name, int first, int last);
+    PerfCountersBuilder(Configure *config, const std::string &name, int first, int last);
     ~PerfCountersBuilder();
 
     // prio values: higher is better, and higher values get included in
@@ -197,14 +197,16 @@ class PerfCounters {
 
     void tset(int idx, utime_t v);
     void tinc(int idx, utime_t v);
-    void tinc(int idx, ceph::timespan v);
+    void tinc(int idx, common::timespan v);
     utime_t tget(int idx) const;
 
     void hinc(int idx, int64_t x, int64_t y);
 
     void reset();
-    void dump_formatted(ceph::Formatter *f, bool schema, const std::string &counter = "") const { dump_formatted_generic(f, schema, false, counter); }
-    void dump_formatted_histograms(ceph::Formatter *f, bool schema, const std::string &counter = "") const {
+    void dump_formatted(RDMACapsule::Formatter *f, bool schema, const std::string &counter = "") const {
+        dump_formatted_generic(f, schema, false, counter);
+    }
+    void dump_formatted_histograms(RDMACapsule::Formatter *f, bool schema, const std::string &counter = "") const {
         dump_formatted_generic(f, schema, true, counter);
     }
     std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
@@ -218,25 +220,23 @@ class PerfCounters {
     int get_adjusted_priority(int p) const { return std::max(std::min(p + prio_adjust, (int)PerfCountersBuilder::PRIO_CRITICAL), 0); }
 
    private:
-    PerfCounters(CephContext *cct, const std::string &name, int lower_bound, int upper_bound);
+    PerfCounters(Configure *config, const std::string &name, int lower_bound, int upper_bound);
     PerfCounters(const PerfCounters &rhs);
     PerfCounters &operator=(const PerfCounters &rhs);
-    void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms, const std::string &counter = "") const;
+    void dump_formatted_generic(common::Formatter *f, bool schema, bool histograms, const std::string &counter = "") const;
 
     typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
-    CephContext *m_cct;
+    Configure *m_config;
     int m_lower_bound;
     int m_upper_bound;
     std::string m_name;
 
     int prio_adjust = 0;
 
-#if !defined(WITH_SEASTAR) || defined(WITH_ALIEN)
     const std::string m_lock_name;
     /** Protects m_data */
-    ceph::mutex m_lock;
-#endif
+    std::mutex m_lock;
 
     perf_counter_data_vec_t m_data;
 
@@ -263,11 +263,11 @@ class PerfCountersCollectionImpl {
     void clear();
     bool reset(const std::string &name);
 
-    void dump_formatted(ceph::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "") const {
+    void dump_formatted(common::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "") const {
         dump_formatted_generic(f, schema, false, logger, counter);
     }
 
-    void dump_formatted_histograms(ceph::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "") const {
+    void dump_formatted_histograms(common::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "") const {
         dump_formatted_generic(f, schema, true, logger, counter);
     }
 
@@ -284,7 +284,7 @@ class PerfCountersCollectionImpl {
     void with_counters(std::function<void(const CounterMap &)>) const;
 
    private:
-    void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms, const std::string &logger = "",
+    void dump_formatted_generic(common::Formatter *f, bool schema, bool histograms, const std::string &logger = "",
                                 const std::string &counter = "") const;
 
     perf_counters_set_t m_loggers;

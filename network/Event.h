@@ -151,7 +151,7 @@ class EventCenter {
     };
 
    private:
-    CephContext *cct;
+    Configure *config;
     std::string type;
     int nevent;
     // Used only to external event
@@ -182,8 +182,8 @@ class EventCenter {
     }
 
    public:
-    explicit EventCenter(CephContext *c)
-        : cct(c),
+    explicit EventCenter(Configure *c)
+        : config(c),
           nevent(0),
           external_num_events(0),
           driver(NULL),
@@ -208,7 +208,7 @@ class EventCenter {
     uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
     void delete_file_event(int fd, int mask);
     void delete_time_event(uint64_t id);
-    int process_events(unsigned timeout_microseconds, ceph::timespan *working_dur = nullptr);
+    int process_events(unsigned timeout_microseconds, common::timespan *working_dur = nullptr);
     void wakeup();
 
     // Used by external thread

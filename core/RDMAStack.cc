@@ -26,7 +26,6 @@
 #include "include/compat.h"
 #include "include/str_list.h"
 
-#define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << "RDMAStack "
 

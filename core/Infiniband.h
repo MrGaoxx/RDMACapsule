@@ -26,11 +26,9 @@
 #include <string>
 #include <vector>
 
+#include "common/perf_counters.h"
 #include "include/common.h"
-#include "include/perf_counters.h"
-#include "include/scope_guard.h"
-#include "msg/async/net_handler.h"
-#include "msg/msg_types.h"
+#include "network/net_handler.h"
 
 #define HUGE_PAGE_SIZE_2MB (2 * 1024 * 1024)
 #define ALIGN_TO_PAGE_2MB(x) (((x) + (HUGE_PAGE_SIZE_2MB - 1)) & ~(HUGE_PAGE_SIZE_2MB - 1))
@@ -137,7 +135,6 @@ class DeviceList {
     }
 };
 
-/*
 // stat counters
 enum {
     l_msgr_rdma_dispatcher_first = 94000,
@@ -182,7 +179,7 @@ enum {
 
     l_msgr_rdma_last,
 };
-*/
+
 class RDMADispatcher;
 
 class Infiniband {
@@ -246,7 +243,7 @@ class Infiniband {
             MemoryManager &manager;
             uint32_t buffer_size;
             uint32_t num_chunk = 0;
-            ceph::mutex lock = ceph::make_mutex("cluster_lock");
+            std::mutex lock;
             std::vector<Chunk *> free_chunks;
             char *base = nullptr;
             char *end = nullptr;
@@ -291,7 +288,7 @@ class Infiniband {
             }
 
            private:
-            static ceph::mutex &get_lock();
+            static std::mutex &get_lock();
             static MemPoolContext *g_ctx;
         };
 
@@ -310,7 +307,7 @@ class Infiniband {
             void *slow_malloc();
 
            public:
-            ceph::mutex lock = ceph::make_mutex("mem_pool_lock");
+            std::mutex lock;
             explicit mem_pool(MemPoolContext *ctx, const size_type nrequested_size, const size_type nnext_size = 32, const size_type nmax_size = 0)
                 : pool(nrequested_size, nnext_size, nmax_size), ctx(ctx) {}
 
@@ -376,7 +373,7 @@ class Infiniband {
     ProtectionDomain *pd = NULL;
     DeviceList *device_list = nullptr;
     RDMAConfig *rdmaConig;
-    ceph::mutex lock = ceph::make_mutex("IB lock");
+    std::mutex lock;
     bool initialized = false;
     const std::string &device_name;
     uint8_t port_num;
@@ -527,7 +524,7 @@ class Infiniband {
         uint32_t q_key;
         bool dead;
         std::vector<Chunk *> recv_queue;
-        ceph::mutex lock = ceph::make_mutex("queue_pair_lock");
+        std::mutex lock;
     };
 
    public:

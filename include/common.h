@@ -5,7 +5,6 @@
             std::cout << "assert failed "##x << std::endl; \
             abort();                                       \
         }
-
 struct Configure {
     RDMAConfiguration m_rdma_config_;
 }

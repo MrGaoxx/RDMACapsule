@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -14,84 +14,68 @@
  *
  */
 
-#include "common/errno.h"
 #include "EventSelect.h"
 
-#include <unistd.h>
 #include <sys/select.h>
-#define dout_subsys ceph_subsys_ms
+#include <unistd.h>
+
+#include "common/errno.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "SelectDriver."
 
-int SelectDriver::init(EventCenter *c, int nevent)
-{
-  #ifndef _WIN32
-  ldout(cct, 0) << "Select isn't suitable for production env, just avoid "
-                << "compiling error or special purpose" << dendl;
-  #endif
-  FD_ZERO(&rfds);
-  FD_ZERO(&wfds);
-  max_fd = 0;
-  return 0;
+int SelectDriver::init(EventCenter *c, int nevent) {
+#ifndef _WIN32
+    ldout(config, 0) << "Select isn't suitable for production env, just avoid "
+                     << "compiling error or special purpose" << dendl;
+#endif
+    FD_ZERO(&rfds);
+    FD_ZERO(&wfds);
+    max_fd = 0;
+    return 0;
 }
 
-int SelectDriver::add_event(int fd, int cur_mask, int add_mask)
-{
-  ldout(cct, 10) << __func__ << " add event to fd=" << fd << " mask=" << add_mask
-                 << dendl;
+int SelectDriver::add_event(int fd, int cur_mask, int add_mask) {
+    ldout(config, 10) << __func__ << " add event to fd=" << fd << " mask=" << add_mask << dendl;
 
-  int mask = cur_mask | add_mask;
-  if (mask & EVENT_READABLE)
-    FD_SET(fd, &rfds);
-  if (mask & EVENT_WRITABLE)
-    FD_SET(fd, &wfds);
-  if (fd > max_fd)
-      max_fd = fd;
+    int mask = cur_mask | add_mask;
+    if (mask & EVENT_READABLE) FD_SET(fd, &rfds);
+    if (mask & EVENT_WRITABLE) FD_SET(fd, &wfds);
+    if (fd > max_fd) max_fd = fd;
 
-  return 0;
+    return 0;
 }
 
-int SelectDriver::del_event(int fd, int cur_mask, int delmask)
-{
-  ldout(cct, 10) << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask
-                 << dendl;
+int SelectDriver::del_event(int fd, int cur_mask, int delmask) {
+    ldout(config, 10) << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask << dendl;
 
-  if (delmask & EVENT_READABLE)
-    FD_CLR(fd, &rfds);
-  if (delmask & EVENT_WRITABLE)
-    FD_CLR(fd, &wfds);
-  return 0;
+    if (delmask & EVENT_READABLE) FD_CLR(fd, &rfds);
+    if (delmask & EVENT_WRITABLE) FD_CLR(fd, &wfds);
+    return 0;
 }
 
-int SelectDriver::resize_events(int newsize)
-{
-  return 0;
-}
+int SelectDriver::resize_events(int newsize) { return 0; }
 
-int SelectDriver::event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tvp)
-{
-  int retval, numevents = 0;
+int SelectDriver::event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tvp) {
+    int retval, numevents = 0;
 
-  memcpy(&_rfds, &rfds, sizeof(fd_set));
-  memcpy(&_wfds, &wfds, sizeof(fd_set));
+    memcpy(&_rfds, &rfds, sizeof(fd_set));
+    memcpy(&_wfds, &wfds, sizeof(fd_set));
 
-  retval = select(max_fd+1, &_rfds, &_wfds, NULL, tvp);
-  if (retval > 0) {
-    for (int j = 0; j <= max_fd; j++) {
-      int mask = 0;
-      struct FiredFileEvent fe;
-      if (FD_ISSET(j, &_rfds))
-          mask |= EVENT_READABLE;
-      if (FD_ISSET(j, &_wfds))
-          mask |= EVENT_WRITABLE;
-      if (mask) {
-        fe.fd = j;
-        fe.mask = mask;
-        fired_events.push_back(fe);
-        numevents++;
-      }
+    retval = select(max_fd + 1, &_rfds, &_wfds, NULL, tvp);
+    if (retval > 0) {
+        for (int j = 0; j <= max_fd; j++) {
+            int mask = 0;
+            struct FiredFileEvent fe;
+            if (FD_ISSET(j, &_rfds)) mask |= EVENT_READABLE;
+            if (FD_ISSET(j, &_wfds)) mask |= EVENT_WRITABLE;
+            if (mask) {
+                fe.fd = j;
+                fe.mask = mask;
+                fired_events.push_back(fe);
+                numevents++;
+            }
+        }
     }
-  }
-  return numevents;
+    return numevents;
 }

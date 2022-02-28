@@ -1,62 +1,42 @@
-#include "common/perf_counters_collection.h"
-#include "common/ceph_mutex.h"
-#include "common/ceph_context.h"
+#include "perf_counters_collection.h"
 
-namespace ceph::common {
+#include "common.h"
+
+namespace common {
 /* PerfcounterCollection hold the lock for PerfCounterCollectionImp */
-PerfCountersCollection::PerfCountersCollection(CephContext *cct)
-  : m_cct(cct),
-    m_lock(ceph::make_mutex("PerfCountersCollection"))
-{
+PerfCountersCollection::PerfCountersCollection(Configure *config) : m_config(config), m_lock() {}
+PerfCountersCollection::~PerfCountersCollection() { clear(); }
+void PerfCountersCollection::add(PerfCounters *l) {
+    std::lock_guard lck(m_lock);
+    perf_impl.add(l);
 }
-PerfCountersCollection::~PerfCountersCollection()
-{
-  clear();
+void PerfCountersCollection::remove(PerfCounters *l) {
+    std::lock_guard lck(m_lock);
+    perf_impl.remove(l);
 }
-void PerfCountersCollection::add(PerfCounters *l)
-{
-  std::lock_guard lck(m_lock);
-  perf_impl.add(l);
+void PerfCountersCollection::clear() {
+    std::lock_guard lck(m_lock);
+    perf_impl.clear();
 }
-void PerfCountersCollection::remove(PerfCounters *l)
-{
-  std::lock_guard lck(m_lock);
-  perf_impl.remove(l);
+bool PerfCountersCollection::reset(const std::string &name) {
+    std::lock_guard lck(m_lock);
+    return perf_impl.reset(name);
 }
-void PerfCountersCollection::clear()
-{
-  std::lock_guard lck(m_lock);
-  perf_impl.clear();
+void PerfCountersCollection::dump_formatted(common::Formatter *f, bool schema, const std::string &logger, const std::string &counter) {
+    std::lock_guard lck(m_lock);
+    perf_impl.dump_formatted(f, schema, logger, counter);
 }
-bool PerfCountersCollection::reset(const std::string &name)
-{
-  std::lock_guard lck(m_lock);
-  return perf_impl.reset(name);
+void PerfCountersCollection::dump_formatted_histograms(common::Formatter *f, bool schema, const std::string &logger, const std::string &counter) {
+    std::lock_guard lck(m_lock);
+    perf_impl.dump_formatted_histograms(f, schema, logger, counter);
 }
-void PerfCountersCollection::dump_formatted(ceph::Formatter *f, bool schema,
-                      const std::string &logger,
-                      const std::string &counter)
-{
-  std::lock_guard lck(m_lock);
-  perf_impl.dump_formatted(f,schema,logger,counter);
+void PerfCountersCollection::with_counters(std::function<void(const PerfCountersCollectionImpl::CounterMap &)> fn) const {
+    std::lock_guard lck(m_lock);
+    perf_impl.with_counters(fn);
 }
-void PerfCountersCollection::dump_formatted_histograms(ceph::Formatter *f, bool schema,
-                                 const std::string &logger,
-                                 const std::string &counter)
-{
-  std::lock_guard lck(m_lock);
-  perf_impl.dump_formatted_histograms(f,schema,logger,counter);
-}
-void PerfCountersCollection::with_counters(std::function<void(const PerfCountersCollectionImpl::CounterMap &)> fn) const
-{
-  std::lock_guard lck(m_lock);
-  perf_impl.with_counters(fn);
-}
-void PerfCountersDeleter::operator()(PerfCounters* p) noexcept
-{
-  if (cct)
-    cct->get_perfcounters_collection()->remove(p);
-  delete p;
+void PerfCountersDeleter::operator()(PerfCounters *p) noexcept {
+    if (config) config->get_perfcounters_collection()->remove(p);
+    delete p;
 }
 
-}
+}  // namespace common

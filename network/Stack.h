@@ -190,7 +190,7 @@ class Worker {
    public:
     bool done = false;
 
-    CephContext *cct;
+    Configure *config;
     PerfCounters *perf_logger;
     unsigned id;
 
@@ -200,11 +200,11 @@ class Worker {
     Worker(const Worker &) = delete;
     Worker &operator=(const Worker &) = delete;
 
-    Worker(CephContext *c, unsigned worker_id) : cct(c), perf_logger(NULL), id(worker_id), references(0), center(c) {
+    Worker(Configure *c, unsigned worker_id) : config(c), perf_logger(NULL), id(worker_id), references(0), center(c) {
         char name[128];
         sprintf(name, "AsyncMessenger::Worker-%u", id);
         // initialize perf_logger
-        PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
+        PerfCountersBuilder plb(config, name, l_msgr_first, l_msgr_last);
 
         plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
         plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
@@ -222,11 +222,11 @@ class Worker {
         plb.add_time_avg(l_msgr_handle_ack_lat, "msgr_handle_ack_lat", "Connection handle ack lat");
 
         perf_logger = plb.create_perf_counters();
-        cct->get_perfcounters_collection()->add(perf_logger);
+        config->get_perfcounters_collection()->add(perf_logger);
     }
     virtual ~Worker() {
         if (perf_logger) {
-            cct->get_perfcounters_collection()->remove(perf_logger);
+            config->get_perfcounters_collection()->remove(perf_logger);
             delete perf_logger;
         }
     }
@@ -270,7 +270,7 @@ class NetworkStack {
 
     std::function<void()> add_thread(Worker *w);
 
-    virtual Worker *create_worker(CephContext *c, unsigned i) = 0;
+    virtual Worker *create_worker(Configure *c, unsigned i) = 0;
     virtual void rename_thread(unsigned id) {
         static constexpr int TASK_COMM_LEN = 16;
         char tp_name[TASK_COMM_LEN];
@@ -279,10 +279,10 @@ class NetworkStack {
     }
 
    protected:
-    CephContext *cct;
+    Configure *config;
     std::vector<Worker *> workers;
 
-    explicit NetworkStack(CephContext *c);
+    explicit NetworkStack(Configure *c);
 
    public:
     NetworkStack(const NetworkStack &) = delete;
@@ -291,7 +291,7 @@ class NetworkStack {
         for (auto &&w : workers) delete w;
     }
 
-    static std::shared_ptr<NetworkStack> create(CephContext *c, const std::string &type);
+    static std::shared_ptr<NetworkStack> create(Configure *c, const std::string &type);
 
     // backend need to override this method if backend doesn't support shared
     // listen table.

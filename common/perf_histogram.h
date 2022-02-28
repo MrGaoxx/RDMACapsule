@@ -21,7 +21,7 @@
 #include <atomic>
 #include <memory>
 
-#include "common/Formatter.h"
+#include "Formatter.h"
 #include "include/common.h"
 
 class PerfHistogramCommon {

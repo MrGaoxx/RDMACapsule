@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -20,23 +20,22 @@
 #include "Event.h"
 
 class SelectDriver : public EventDriver {
-  fd_set rfds, wfds;
-  /* We need to have a copy of the fd sets as it's not safe to reuse
-   * FD sets after select(). */
-  fd_set _rfds, _wfds;
-  int max_fd;
-  CephContext *cct;
+    fd_set rfds, wfds;
+    /* We need to have a copy of the fd sets as it's not safe to reuse
+     * FD sets after select(). */
+    fd_set _rfds, _wfds;
+    int max_fd;
+    Configure *config;
 
- public:
-  explicit SelectDriver(CephContext *c): max_fd(0), cct(c) {}
-  ~SelectDriver() override {}
+   public:
+    explicit SelectDriver(Configure *c) : max_fd(0), config(c) {}
+    ~SelectDriver() override {}
 
-  int init(EventCenter *c, int nevent) override;
-  int add_event(int fd, int cur_mask, int add_mask) override;
-  int del_event(int fd, int cur_mask, int del_mask) override;
-  int resize_events(int newsize) override;
-  int event_wait(std::vector<FiredFileEvent> &fired_events,
-		 struct timeval *tp) override;
+    int init(EventCenter *c, int nevent) override;
+    int add_event(int fd, int cur_mask, int add_mask) override;
+    int del_event(int fd, int cur_mask, int del_mask) override;
+    int resize_events(int newsize) override;
+    int event_wait(std::vector<FiredFileEvent> &fired_events, struct timeval *tp) override;
 };
 
 #endif

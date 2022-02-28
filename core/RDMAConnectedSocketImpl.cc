@@ -39,7 +39,6 @@ class C_handle_connection_read : public EventCallback {
     void close() { active = false; }
 };
 
-#define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
 

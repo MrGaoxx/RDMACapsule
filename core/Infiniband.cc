@@ -21,9 +21,7 @@
 
 #include "RDMAStack.h"
 #include "common/debug.h"
-#include "common/errno.h"
 
-#define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << "Infiniband "
 
@@ -540,7 +538,7 @@ int Infiniband::CompletionChannel::init() {
         lderr(rdmaConig) << __func__ << " failed to create receive completion channel: " << cpp_strerror(errno) << dendl;
         return -1;
     }
-    int rc = ceph::NetHandler(rdmaConig).set_nonblock(channel->fd);
+    int rc = network::NetHandler(rdmaConig).set_nonblock(channel->fd);
     if (rc < 0) {
         ibv_destroy_comp_channel(channel);
         return -1;
@@ -764,8 +762,8 @@ void *Infiniband::MemoryManager::mem_pool::slow_malloc() {
 Infiniband::MemoryManager::MemPoolContext *Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
 
 // lock is taken by mem_pool::slow_malloc()
-ceph::mutex &Infiniband::MemoryManager::PoolAllocator::get_lock() {
-    static ceph::mutex lock = ceph::make_mutex("pool-alloc-lock");
+std::mutex &Infiniband::MemoryManager::PoolAllocator::get_lock() {
+    static std::mutex lock;
     return lock;
 }
 
@@ -951,7 +949,7 @@ void Infiniband::init() {
     device->binding_port(rdmaConig, port_num);
     ib_physical_port = device->active_port->get_port_num();
     pd = new ProtectionDomain(rdmaConig, device);
-    kassert(ceph::NetHandler(rdmaConig).set_nonblock(device->ctxt->async_fd) == 0);
+    kassert(std::NetHandler(rdmaConig).set_nonblock(device->ctxt->async_fd) == 0);
 
     support_srq = rdmaConig->_conf->ms_async_rdma_support_srq;
     if (support_srq) {
