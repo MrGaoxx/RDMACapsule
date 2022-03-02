@@ -17,18 +17,12 @@
 #include <mutex>
 
 #include "PosixStack.h"
-#include "common/Cond.h"
-#include "common/errno.h"
-#include "include/compat.h"
-#ifdef HAVE_RDMA
-#include "rdma/RDMAStack.h"
-#endif
+#include "common/common.h"
+#include "common/common_time.h"
+#include "core/RDMAStack.h"
 #ifdef HAVE_DPDK
 #include "dpdk/DPDKStack.h"
 #endif
-
-#include "common/dout.h"
-#include "include/ceph_assert.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "stack "
@@ -38,16 +32,16 @@ std::function<void()> NetworkStack::add_thread(Worker* w) {
         rename_thread(w->id);
         const unsigned EventMaxWaitUs = 30000000;
         w->center.set_owner();
-        ldout(config, 10) << __func__ << " starting" << dendl;
+        std::cout << __func__ << " starting" << std::endl;
         w->initialize();
         w->init_done();
         while (!w->done) {
-            ldout(config, 30) << __func__ << " calling event process" << dendl;
+            std::cout << __func__ << " calling event process" << std::endl;
 
             common::timespan dur;
             int r = w->center.process_events(EventMaxWaitUs, &dur);
             if (r < 0) {
-                ldout(config, 20) << __func__ << " process events failed: " << cpp_strerror(errno) << dendl;
+                std::cout << __func__ << " process events failed: " << cpp_strerror(errno) << std::endl;
                 // TODO do something?
             }
             w->perf_logger->tinc(l_msgr_running_total_time, dur);
@@ -57,7 +51,7 @@ std::function<void()> NetworkStack::add_thread(Worker* w) {
     };
 }
 
-std::shared_ptr<NetworkStack> NetworkStack::create(Configure* c, const std::string& t) {
+std::shared_ptr<NetworkStack> NetworkStack::create(Context* c, const std::string& t) {
     std::shared_ptr<NetworkStack> stack = nullptr;
 
     if (t == "posix") stack.reset(new PosixNetworkStack(c));
@@ -71,16 +65,16 @@ std::shared_ptr<NetworkStack> NetworkStack::create(Configure* c, const std::stri
 #endif
 
     if (stack == nullptr) {
-        lderr(c) << __func__ << " ms_async_transport_type " << t << " is not supported! " << dendl;
+        std::cout << __func__ << " ms_async_transport_type " << t << " is not supported! " << std::endl;
         ceph_abort();
         return nullptr;
     }
 
-    unsigned num_workers = c->_conf->ms_async_op_threads;
+    unsigned num_workers = c->m_rdma_config_->ms_async_op_threads;
     ceph_assert(num_workers > 0);
     if (num_workers >= EventCenter::MAX_EVENTCENTER) {
         ldout(c, 0) << __func__ << " max thread limit is " << EventCenter::MAX_EVENTCENTER << ", switching to this now. "
-                    << "Higher thread values are unnecessary and currently unsupported." << dendl;
+                    << "Higher thread values are unnecessary and currently unsupported." << std::endl;
         num_workers = EventCenter::MAX_EVENTCENTER;
     }
     const int InitEventNumber = 5000;
@@ -94,7 +88,7 @@ std::shared_ptr<NetworkStack> NetworkStack::create(Configure* c, const std::stri
     return stack;
 }
 
-NetworkStack::NetworkStack(Configure* c) : config(c) {}
+NetworkStack::NetworkStack(Context* c) : config(c) {}
 
 void NetworkStack::start() {
     std::unique_lock<decltype(pool_spin)> lk(pool_spin);
@@ -116,7 +110,7 @@ void NetworkStack::start() {
 }
 
 Worker* NetworkStack::get_worker() {
-    ldout(config, 30) << __func__ << dendl;
+    std::cout << __func__ << std::endl;
 
     // start with some reasonably large number
     unsigned min_load = std::numeric_limits<int>::max();
@@ -170,7 +164,7 @@ class C_drain : public EventCallback {
 };
 
 void NetworkStack::drain() {
-    ldout(config, 30) << __func__ << " started." << dendl;
+    std::cout << __func__ << " started." << std::endl;
     pthread_t cur = pthread_self();
     pool_spin.lock();
     C_drain drain(get_num_worker());
@@ -180,5 +174,5 @@ void NetworkStack::drain() {
     }
     pool_spin.unlock();
     drain.wait();
-    ldout(config, 30) << __func__ << " end." << dendl;
+    std::cout << __func__ << " end." << std::endl;
 }

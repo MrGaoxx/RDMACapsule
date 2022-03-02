@@ -16,11 +16,11 @@
 
 #include "Infiniband.h"
 
+#include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/time.h>
 
 #include "RDMAStack.h"
-#include "common/debug.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "Infiniband "
@@ -30,11 +30,10 @@ static const uint32_t MAX_INLINE_DATA = 0;
 static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 static const uint32_t CQ_DEPTH = 30000;
 
-Port::Port(RDMAConfig *rdmaConig, struct ibv_context *ictxt, uint8_t ipn)
-    : ctxt(ictxt), port_num(ipn), gid_idx(rdmaConig->_conf.get_val<int64_t>("ms_async_rdma_gid_idx")) {
+Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictxt), port_num(ipn), gid_idx(context->m_rdma_config_->m_gid_index) {
     int r = ibv_query_port(ctxt, port_num, &port_attr);
     if (r == -1) {
-        lderr(rdmaConig) << __func__ << " query port failed  " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " query port failed  " << cpp_strerror(errno) << std::endl;
         abort();
     }
 
@@ -45,19 +44,19 @@ Port::Port(RDMAConfig *rdmaConig, struct ibv_context *ictxt, uint8_t ipn)
     struct ibv_exp_gid_attr gid_attr;
     bool malformed = false;
 
-    ldout(rdmaConig, 1) << __func__ << " using experimental verbs for gid" << dendl;
+    std::cout << __func__ << " using experimental verbs for gid" << std::endl;
 
     // search for requested GID in GIDs table
-    ldout(rdmaConig, 1) << __func__ << " looking for local GID " << (rdmaConig->_conf->ms_async_rdma_local_gid) << " of type "
-                        << (rdmaConig->_conf->ms_async_rdma_roce_ver) << dendl;
-    r = sscanf(rdmaConig->_conf->ms_async_rdma_local_gid.c_str(),
+    std::cout << __func__ << " looking for local GID " << (context->m_rdma_config_->ms_async_rdma_local_gid) << " of type "
+              << (context->m_rdma_config_->ms_async_rdma_roce_ver) << std::endl;
+    r = sscanf(context->m_rdma_config_->ms_async_rdma_local_gid.c_str(),
                "%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx"
                ":%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx",
                &cgid.raw[0], &cgid.raw[1], &cgid.raw[2], &cgid.raw[3], &cgid.raw[4], &cgid.raw[5], &cgid.raw[6], &cgid.raw[7], &cgid.raw[8],
                &cgid.raw[9], &cgid.raw[10], &cgid.raw[11], &cgid.raw[12], &cgid.raw[13], &cgid.raw[14], &cgid.raw[15]);
 
     if (r != 16) {
-        ldout(rdmaConig, 1) << __func__ << " malformed or no GID supplied, using GID index 0" << dendl;
+        std::cout << __func__ << " malformed or no GID supplied, using GID index 0" << std::endl;
         malformed = true;
     }
 
@@ -66,37 +65,37 @@ Port::Port(RDMAConfig *rdmaConig, struct ibv_context *ictxt, uint8_t ipn)
     for (gid_idx = 0; gid_idx < port_attr.gid_tbl_len; gid_idx++) {
         r = ibv_query_gid(ctxt, port_num, gid_idx, &gid);
         if (r) {
-            lderr(rdmaConig) << __func__ << " query gid of port " << port_num << " index " << gid_idx << " failed  " << cpp_strerror(errno) << dendl;
+            std::cout << __func__ << " query gid of port " << port_num << " index " << gid_idx << " failed  " << cpp_strerror(errno) << std::endl;
             abort();
         }
         r = ibv_exp_query_gid_attr(ctxt, port_num, gid_idx, &gid_attr);
         if (r) {
-            lderr(rdmaConig) << __func__ << " query gid attributes of port " << port_num << " index " << gid_idx << " failed  " << cpp_strerror(errno)
-                             << dendl;
+            std::cout << __func__ << " query gid attributes of port " << port_num << " index " << gid_idx << " failed  " << cpp_strerror(errno)
+                      << std::endl;
             abort();
         }
 
         if (malformed) break;  // stay with gid_idx=0
-        if ((gid_attr.type == rdmaConig->_conf->ms_async_rdma_roce_ver) && (memcmp(&gid, &cgid, 16) == 0)) {
-            ldout(rdmaConig, 1) << __func__ << " found at index " << gid_idx << dendl;
+        if ((gid_attr.type == context->m_rdma_config_->ms_async_rdma_roce_ver) && (memcmp(&gid, &cgid, 16) == 0)) {
+            std::cout << __func__ << " found at index " << gid_idx << std::endl;
             break;
         }
     }
 
     if (gid_idx == port_attr.gid_tbl_len) {
-        lderr(rdmaConig) << __func__ << " Requested local GID was not found in GID table" << dendl;
+        std::cout << __func__ << " Requested local GID was not found in GID table" << std::endl;
         abort();
     }
 #else
     r = ibv_query_gid(ctxt, port_num, gid_idx, &gid);
     if (r) {
-        lderr(rdmaConig) << __func__ << " query gid failed  " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " query gid failed  " << cpp_strerror(errno) << std::endl;
         abort();
     }
 #endif
 }
 
-Device::Device(RDMAConfig *rdmaConig, ibv_device *ib_dev) : device(ib_dev), active_port(nullptr) {
+Device::Device(Context *context, ibv_device *ib_dev) : device(ib_dev), get_port()(nullptr) {
     kassert(device);
     ctxt = ibv_open_device(device);
     kassert(ctxt);
@@ -105,12 +104,12 @@ Device::Device(RDMAConfig *rdmaConig, ibv_device *ib_dev) : device(ib_dev), acti
 
     int r = ibv_query_device(ctxt, &device_attr);
     if (r) {
-        lderr(rdmaConig) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << std::endl;
         abort();
     }
 }
 
-Device::Device(RDMAConfig *rdmaConig, struct ibv_context *ib_ctx) : device(ib_ctx->device), active_port(nullptr) {
+Device::Device(Context *context, struct ibv_context *ib_ctx) : device(ib_ctx->device), get_port()(nullptr) {
     kassert(device);
     ctxt = ib_ctx;
     kassert(ctxt);
@@ -119,38 +118,38 @@ Device::Device(RDMAConfig *rdmaConig, struct ibv_context *ib_ctx) : device(ib_ct
 
     int r = ibv_query_device(ctxt, &device_attr);
     if (r) {
-        lderr(rdmaConig) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << std::endl;
         abort();
     }
 }
 
-void Device::binding_port(RDMAConfig *rdmaConig, int port_num) {
-    port_cnt = device_attr.phys_port_cnt;
+void Device::binding_port(Context *context, int port_num) {
+    port_cnt = get_device_attr()->phys_port_cnt;
     for (uint8_t port_id = 1; port_id <= port_cnt; ++port_id) {
-        Port *port = new Port(rdmaConig, ctxt, port_id);
+        Port *port = new Port(context, ctxt, port_id);
         if (port_id == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
             active_port = port;
-            ldout(rdmaConig, 1) << __func__ << " found active port " << static_cast<int>(port_id) << dendl;
+            std::cout << __func__ << " found active port " << static_cast<int>(port_id) << std::endl;
             break;
         } else {
-            ldout(rdmaConig, 10) << __func__ << " port " << port_id
-                                 << " is not what we want. state: " << ibv_port_state_str(port->get_port_attr()->state) << dendl;
+            std::cout << __func__ << " port " << port_id << " is not what we want. state: " << ibv_port_state_str(port->get_port_attr()->state)
+                      << std::endl;
             delete port;
         }
     }
-    if (nullptr == active_port) {
-        lderr(rdmaConig) << __func__ << "  port not found" << dendl;
-        kassert(active_port);
+    if (nullptr == get_port()) {
+        std::cout << __func__ << "  port not found" << std::endl;
+        kassert(get_port());
     }
 }
 
-Infiniband::QueuePair::QueuePair(RDMAConfig *c, Infiniband &infiniband, ibv_qp_type type, int port, ibv_srq *srq, Infiniband::CompletionQueue *txcq,
+Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type type, int port, ibv_srq *srq, Infiniband::CompletionQueue *txcq,
                                  Infiniband::CompletionQueue *rxcq, uint32_t tx_queue_len, uint32_t rx_queue_len, struct rdma_cm_id *cid,
                                  uint32_t q_key)
-    : rdmaConig(c),
+    : context(c),
       infiniband(infiniband),
       type(type),
-      ctxt(infiniband.device->ctxt),
+      ctxt(infiniband.device->get_context()),
       ib_physical_port(port),
       pd(infiniband.pd->pd),
       srq(srq),
@@ -167,7 +166,7 @@ Infiniband::QueuePair::QueuePair(RDMAConfig *c, Infiniband &infiniband, ibv_qp_t
       q_key(q_key),
       dead(false) {
     if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
-        lderr(rdmaConig) << __func__ << " invalid queue pair type" << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " invalid queue pair type" << cpp_strerror(errno) << std::endl;
         abort();
     }
 }
@@ -178,10 +177,10 @@ int Infiniband::QueuePair::modify_qp_to_error(void) {
     memset(&qpa, 0, sizeof(qpa));
     qpa.qp_state = IBV_QPS_ERR;
     if (ibv_modify_qp(qp, &qpa, IBV_QP_STATE)) {
-        lderr(rdmaConig) << __func__ << " failed to transition to ERROR state: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to transition to ERROR state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    ldout(rdmaConig, 20) << __func__ << " transition to ERROR state successfully." << dendl;
+    std::cout << __func__ << " transition to ERROR state successfully." << std::endl;
     return 0;
 }
 
@@ -212,10 +211,10 @@ int Infiniband::QueuePair::modify_qp_to_rts(void) {
     int attr_mask = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
     int r = ibv_modify_qp(qp, &qpa, attr_mask);
     if (r) {
-        lderr(rdmaConig) << __func__ << " failed to transition to RTS state: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to transition to RTS state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    ldout(rdmaConig, 20) << __func__ << " transition to RTS state successfully." << dendl;
+    std::cout << __func__ << " transition to RTS state successfully." << std::endl;
     return 0;
 }
 
@@ -234,24 +233,24 @@ int Infiniband::QueuePair::modify_qp_to_rtr(void) {
     qpa.ah_attr.grh.hop_limit = 6;
     qpa.ah_attr.grh.dgid = peer_cm_meta.gid;
     qpa.ah_attr.grh.sgid_index = infiniband.get_device()->get_gid_idx();
-    qpa.ah_attr.grh.traffic_class = rdmaConig->_conf->ms_async_rdma_dscp;
+    qpa.ah_attr.grh.traffic_class = context->m_rdma_config_->m_rdma_dscp_;
     // qpa.ah_attr.grh.flow_label = 0;
 
     qpa.ah_attr.dlid = peer_cm_meta.lid;
-    qpa.ah_attr.sl = rdmaConig->_conf->ms_async_rdma_sl;
+    qpa.ah_attr.sl = context->m_rdma_config_->m_rdma_sl_;
     qpa.ah_attr.src_path_bits = 0;
     qpa.ah_attr.port_num = (uint8_t)(ib_physical_port);
 
-    ldout(rdmaConig, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
+    std::cout << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << std::endl;
 
     int attr_mask = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC;
 
     int r = ibv_modify_qp(qp, &qpa, attr_mask);
     if (r) {
-        lderr(rdmaConig) << __func__ << " failed to transition to RTR state: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to transition to RTR state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    ldout(rdmaConig, 20) << __func__ << " transition to RTR state successfully." << dendl;
+    std::cout << __func__ << " transition to RTR state successfully." << std::endl;
     return 0;
 }
 
@@ -283,16 +282,16 @@ int Infiniband::QueuePair::modify_qp_to_init(void) {
     }
 
     if (ibv_modify_qp(qp, &qpa, mask)) {
-        lderr(rdmaConig) << __func__ << " failed to switch to INIT state Queue Pair, qp number: " << qp->qp_num << " Error: " << cpp_strerror(errno)
-                         << dendl;
+        std::cout << __func__ << " failed to switch to INIT state Queue Pair, qp number: " << qp->qp_num << " Error: " << cpp_strerror(errno)
+                  << std::endl;
         return -1;
     }
-    ldout(rdmaConig, 20) << __func__ << " successfully switch to INIT state Queue Pair, qp number: " << qp->qp_num << dendl;
+    std::cout << __func__ << " successfully switch to INIT state Queue Pair, qp number: " << qp->qp_num << std::endl;
     return 0;
 }
 
 int Infiniband::QueuePair::init() {
-    ldout(rdmaConig, 20) << __func__ << " started." << dendl;
+    std::cout << __func__ << " started." << std::endl;
     ibv_qp_init_attr qpia;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(&qpia, 0, sizeof(qpia));
@@ -310,16 +309,16 @@ int Infiniband::QueuePair::init() {
     qpia.qp_type = type;                         // RC, UC, UD, or XRC
     qpia.sq_sig_all = 0;                         // only generate CQEs on requested WQEs
 
-    if (!rdmaConig->_conf->ms_async_rdma_cm) {
+    if (!context->m_rdma_config_->m_use_rdma_cm_) {
         qp = ibv_create_qp(pd, &qpia);
         if (qp == NULL) {
-            lderr(rdmaConig) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
+            std::cout << __func__ << " failed to create queue pair" << cpp_strerror(errno) << std::endl;
             if (errno == ENOMEM) {
-                lderr(rdmaConig) << __func__
-                                 << " try reducing ms_async_rdma_receive_queue_length, "
-                                    " ms_async_rdma_send_buffers or"
-                                    " ms_async_rdma_buffer_size"
-                                 << dendl;
+                std::cout << __func__
+                          << " try reducing m_rdma_receive_queue_len_gth, "
+                             " m_rdma_send_buffers_ or"
+                             " m_rdma_buffer_size_bytes_"
+                          << std::endl;
             }
             return -1;
         }
@@ -330,13 +329,13 @@ int Infiniband::QueuePair::init() {
     } else {
         kassert(cm_id->verbs == pd->context);
         if (rdma_create_qp(cm_id, pd, &qpia)) {
-            lderr(rdmaConig) << __func__ << " failed to create queue pair with rdmacm library" << cpp_strerror(errno) << dendl;
+            std::cout << __func__ << " failed to create queue pair with rdmacm library" << cpp_strerror(errno) << std::endl;
             return -1;
         }
         qp = cm_id->qp;
     }
-    ldout(rdmaConig, 20) << __func__ << " successfully create queue pair: "
-                         << "qp=" << qp << dendl;
+    std::cout << __func__ << " successfully create queue pair: "
+              << "qp=" << qp << std::endl;
     local_cm_meta.local_qpn = get_local_qp_number();
     local_cm_meta.psn = get_initial_psn();
     local_cm_meta.lid = infiniband.get_lid();
@@ -345,10 +344,10 @@ int Infiniband::QueuePair::init() {
     if (!srq) {
         int rq_wrs = infiniband.post_chunks_to_rq(max_recv_wr, this);
         if (rq_wrs == 0) {
-            lderr(rdmaConig) << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num << " fatal error: can't post SQ WR " << dendl;
+            std::cout << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num << " fatal error: can't post SQ WR " << std::endl;
             return -1;
         }
-        ldout(rdmaConig, 20) << __func__ << " initialize no SRQ Queue Pair, qp number: " << qp->qp_num << " post SQ WR " << rq_wrs << dendl;
+        std::cout << __func__ << " initialize no SRQ Queue Pair, qp number: " << qp->qp_num << " post SQ WR " << rq_wrs << std::endl;
     }
     return 0;
 }
@@ -375,35 +374,30 @@ void Infiniband::QueuePair::gid_to_wire_gid(const ib_cm_meta_t &cm_meta_data, ch
  *   0: means got enough buffer
  * < 0: means error
  */
-int Infiniband::QueuePair::recv_cm_meta(RDMAConfig *rdmaConig, int socket_fd) {
+int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
     char msg[TCP_MSG_LEN];
     char gid[33];
     ssize_t r = ::read(socket_fd, &msg, sizeof(msg));
     // Drop incoming qpt
-    if (rdmaConig->_conf->ms_inject_socket_failures && socket_fd >= 0) {
-        if (rand() % rdmaConig->_conf->ms_inject_socket_failures == 0) {
-            ldout(rdmaConig, 0) << __func__ << " injecting socket failure" << dendl;
-            return -EINVAL;
-        }
-    }
+
     if (r < 0) {
         r = -errno;
-        lderr(rdmaConig) << __func__ << " got error " << r << ": " << cpp_strerror(r) << dendl;
+        std::cout << __func__ << " got error " << r << ": " << cpp_strerror(r) << std::endl;
     } else if (r == 0) {  // valid disconnect message of length 0
-        ldout(rdmaConig, 10) << __func__ << " got disconnect message " << dendl;
+        std::cout << __func__ << " got disconnect message " << std::endl;
     } else if ((size_t)r != sizeof(msg)) {  // invalid message
-        ldout(rdmaConig, 1) << __func__ << " got bad length (" << r << ") " << dendl;
+        std::cout << __func__ << " got bad length (" << r << ") " << std::endl;
         r = -EINVAL;
     } else {  // valid message
         sscanf(msg, "%hx:%x:%x:%x:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn), gid);
         wire_gid_to_gid(gid, &peer_cm_meta);
-        ldout(rdmaConig, 5) << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn << ", " << peer_cm_meta.psn << ", "
-                            << peer_cm_meta.peer_qpn << ", " << gid << dendl;
+        std::cout << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn << ", " << peer_cm_meta.psn << ", "
+                  << peer_cm_meta.peer_qpn << ", " << gid << std::endl;
     }
     return r;
 }
 
-int Infiniband::QueuePair::send_cm_meta(RDMAConfig *rdmaConig, int socket_fd) {
+int Infiniband::QueuePair::send_cm_meta(Context *context, int socket_fd) {
     int retry = 0;
     ssize_t r;
 
@@ -412,16 +406,9 @@ int Infiniband::QueuePair::send_cm_meta(RDMAConfig *rdmaConig, int socket_fd) {
 retry:
     gid_to_wire_gid(local_cm_meta, gid);
     sprintf(msg, "%04x:%08x:%08x:%08x:%s", local_cm_meta.lid, local_cm_meta.local_qpn, local_cm_meta.psn, local_cm_meta.peer_qpn, gid);
-    ldout(rdmaConig, 10) << __func__ << " sending: " << local_cm_meta.lid << ", " << local_cm_meta.local_qpn << ", " << local_cm_meta.psn << ", "
-                         << local_cm_meta.peer_qpn << ", " << gid << dendl;
+    std::cout << __func__ << " sending: " << local_cm_meta.lid << ", " << local_cm_meta.local_qpn << ", " << local_cm_meta.psn << ", "
+              << local_cm_meta.peer_qpn << ", " << gid << std::endl;
     r = ::write(socket_fd, msg, sizeof(msg));
-    // Drop incoming qpt
-    if (rdmaConig->_conf->ms_inject_socket_failures && socket_fd >= 0) {
-        if (rand() % rdmaConig->_conf->ms_inject_socket_failures == 0) {
-            ldout(rdmaConig, 0) << __func__ << " injecting socket failure" << dendl;
-            return -EINVAL;
-        }
-    }
 
     if ((size_t)r != sizeof(msg)) {
         // FIXME need to handle EAGAIN instead of retry
@@ -430,9 +417,9 @@ retry:
             goto retry;
         }
         if (r < 0)
-            lderr(rdmaConig) << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << dendl;
+            std::cout << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << std::endl;
         else
-            lderr(rdmaConig) << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << dendl;
+            std::cout << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << std::endl;
         return -errno;
     }
     return 0;
@@ -453,8 +440,8 @@ int Infiniband::QueuePair::to_dead() {
     if (modify_qp_to_error()) {
         return -1;
     }
-    ldout(rdmaConig, 20) << __func__ << " force trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn
-                         << " bound remote QueuePair, qp number: " << local_cm_meta.peer_qpn << dendl;
+    std::cout << __func__ << " force trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn
+              << " bound remote QueuePair, qp number: " << local_cm_meta.peer_qpn << std::endl;
 
     struct ibv_send_wr *bad_wr = nullptr, beacon;
     // FIPS zeroization audit 20191115: this memset is not security related.
@@ -463,10 +450,10 @@ int Infiniband::QueuePair::to_dead() {
     beacon.opcode = IBV_WR_SEND;
     beacon.send_flags = IBV_SEND_SIGNALED;
     if (ibv_post_send(qp, &beacon, &bad_wr)) {
-        lderr(rdmaConig) << __func__ << " failed to send a beacon: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to send a beacon: " << cpp_strerror(errno) << std::endl;
         return -errno;
     }
-    ldout(rdmaConig, 20) << __func__ << " trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn << " Beacon sent " << dendl;
+    std::cout << __func__ << " trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn << " Beacon sent " << std::endl;
     dead = true;
 
     return 0;
@@ -478,7 +465,7 @@ int Infiniband::QueuePair::get_remote_qp_number(uint32_t *rqp) const {
 
     int r = ibv_query_qp(qp, &qpa, IBV_QP_DEST_QPN, &qpia);
     if (r) {
-        lderr(rdmaConig) << __func__ << " failed to query qp: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to query qp: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
 
@@ -497,7 +484,7 @@ int Infiniband::QueuePair::get_remote_lid(uint16_t *lid) const {
 
     int r = ibv_query_qp(qp, &qpa, IBV_QP_AV, &qpia);
     if (r) {
-        lderr(rdmaConig) << __func__ << " failed to query qp: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to query qp: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
 
@@ -514,31 +501,31 @@ int Infiniband::QueuePair::get_state() const {
 
     int r = ibv_query_qp(qp, &qpa, IBV_QP_STATE, &qpia);
     if (r) {
-        lderr(rdmaConig) << __func__ << " failed to get state: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to get state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
     return qpa.qp_state;
 }
 
-Infiniband::CompletionChannel::CompletionChannel(RDMAConfig *c, Infiniband &ib)
-    : rdmaConig(c), infiniband(ib), channel(NULL), cq(NULL), cq_events_that_need_ack(0) {}
+Infiniband::CompletionChannel::CompletionChannel(Context *c, Infiniband &ib)
+    : context(c), infiniband(ib), channel(NULL), cq(NULL), cq_events_that_need_ack(0) {}
 
 Infiniband::CompletionChannel::~CompletionChannel() {
     if (channel) {
         int r = ibv_destroy_comp_channel(channel);
-        if (r < 0) lderr(rdmaConig) << __func__ << " failed to destroy cc: " << cpp_strerror(errno) << dendl;
+        if (r < 0) std::cout << __func__ << " failed to destroy cc: " << cpp_strerror(errno) << std::endl;
         kassert(r == 0);
     }
 }
 
 int Infiniband::CompletionChannel::init() {
-    ldout(rdmaConig, 20) << __func__ << " started." << dendl;
-    channel = ibv_create_comp_channel(infiniband.device->ctxt);
+    std::cout << __func__ << " started." << std::endl;
+    channel = ibv_create_comp_channel(infiniband.device->get_context());
     if (!channel) {
-        lderr(rdmaConig) << __func__ << " failed to create receive completion channel: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to create receive completion channel: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    int rc = network::NetHandler(rdmaConig).set_nonblock(channel->fd);
+    int rc = Network::NetHandler(context).set_nonblock(channel->fd);
     if (rc < 0) {
         ibv_destroy_comp_channel(channel);
         return -1;
@@ -555,7 +542,7 @@ bool Infiniband::CompletionChannel::get_cq_event() {
     ibv_cq *cq = NULL;
     void *ev_ctx;
     if (ibv_get_cq_event(channel, &cq, &ev_ctx)) {
-        if (errno != EAGAIN && errno != EINTR) lderr(rdmaConig) << __func__ << " failed to retrieve CQ event: " << cpp_strerror(errno) << dendl;
+        if (errno != EAGAIN && errno != EINTR) std::cout << __func__ << " failed to retrieve CQ event: " << cpp_strerror(errno) << std::endl;
         return false;
     }
 
@@ -563,7 +550,7 @@ bool Infiniband::CompletionChannel::get_cq_event() {
      *    * be acked, and periodically ack them
      *       */
     if (++cq_events_that_need_ack == MAX_ACK_EVENT) {
-        ldout(rdmaConig, 20) << __func__ << " ack aq events." << dendl;
+        std::cout << __func__ << " ack aq events." << std::endl;
         ibv_ack_cq_events(cq, MAX_ACK_EVENT);
         cq_events_that_need_ack = 0;
     }
@@ -574,49 +561,49 @@ bool Infiniband::CompletionChannel::get_cq_event() {
 Infiniband::CompletionQueue::~CompletionQueue() {
     if (cq) {
         int r = ibv_destroy_cq(cq);
-        if (r < 0) lderr(rdmaConig) << __func__ << " failed to destroy cq: " << cpp_strerror(errno) << dendl;
+        if (r < 0) std::cout << __func__ << " failed to destroy cq: " << cpp_strerror(errno) << std::endl;
         kassert(r == 0);
     }
 }
 
 int Infiniband::CompletionQueue::init() {
-    cq = ibv_create_cq(infiniband.device->ctxt, queue_depth, this, channel->get_channel(), 0);
+    cq = ibv_create_cq(infiniband.device->get_context(), queue_depth, this, channel->get_channel(), 0);
     if (!cq) {
-        lderr(rdmaConig) << __func__ << " failed to create receive completion queue: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to create receive completion queue: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
 
     if (ibv_req_notify_cq(cq, 0)) {
-        lderr(rdmaConig) << __func__ << " ibv_req_notify_cq failed: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " ibv_req_notify_cq failed: " << cpp_strerror(errno) << std::endl;
         ibv_destroy_cq(cq);
         cq = nullptr;
         return -1;
     }
 
     channel->bind_cq(cq);
-    ldout(rdmaConig, 20) << __func__ << " successfully create cq=" << cq << dendl;
+    std::cout << __func__ << " successfully create cq=" << cq << std::endl;
     return 0;
 }
 
 int Infiniband::CompletionQueue::rearm_notify(bool solicite_only) {
-    ldout(rdmaConig, 20) << __func__ << " started." << dendl;
+    std::cout << __func__ << " started." << std::endl;
     int r = ibv_req_notify_cq(cq, 0);
-    if (r < 0) lderr(rdmaConig) << __func__ << " failed to notify cq: " << cpp_strerror(errno) << dendl;
+    if (r < 0) std::cout << __func__ << " failed to notify cq: " << cpp_strerror(errno) << std::endl;
     return r;
 }
 
 int Infiniband::CompletionQueue::poll_cq(int num_entries, ibv_wc *ret_wc_array) {
     int r = ibv_poll_cq(cq, num_entries, ret_wc_array);
     if (r < 0) {
-        lderr(rdmaConig) << __func__ << " poll_completion_queue occur met error: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " poll_completion_queue occur met error: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
     return r;
 }
 
-Infiniband::ProtectionDomain::ProtectionDomain(RDMAConfig *rdmaConig, Device *device) : pd(ibv_alloc_pd(device->ctxt)) {
+Infiniband::ProtectionDomain::ProtectionDomain(Context *context, Device *device) : pd(ibv_alloc_pd(device->get_context())) {
     if (pd == NULL) {
-        lderr(rdmaConig) << __func__ << " failed to allocate infiniband protection domain: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to allocate infiniband protection domain: " << cpp_strerror(errno) << std::endl;
         abort();
     }
 }
@@ -704,7 +691,7 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num) {
 }
 
 void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk *> &ck) {
-    std::lock_guard l{lock};
+    std::lock_guard<std::mutex> l{lock};
     for (auto c : ck) {
         c->reset_write_chunk();
         free_chunks.push_back(c);
@@ -712,7 +699,7 @@ void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk *> &ck) {
 }
 
 int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk *> &chunks, size_t block_size) {
-    std::lock_guard l{lock};
+    std::lock_guard<std::mutex> l{lock};
     uint32_t chunk_buffer_number = (block_size + buffer_size - 1) / buffer_size;
     chunk_buffer_number = free_chunks.size() < chunk_buffer_number ? free_chunks.size() : chunk_buffer_number;
     uint32_t r = 0;
@@ -726,11 +713,11 @@ int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk *> &chunks
 
 bool Infiniband::MemoryManager::MemPoolContext::can_alloc(unsigned nbufs) {
     /* unlimited */
-    if (manager->rdmaConig->_conf->ms_async_rdma_receive_buffers <= 0) return true;
+    if (manager->context->m_rdma_config_->m_rdma_receive_buffers_bytes_ <= 0) return true;
 
-    if (n_bufs_allocated + nbufs > (unsigned)manager->rdmaConig->_conf->ms_async_rdma_receive_buffers) {
-        lderr(manager->rdmaConig) << __func__ << " WARNING: OUT OF RX BUFFERS: allocated: " << n_bufs_allocated << " requested: " << nbufs
-                                  << " limit: " << manager->rdmaConig->_conf->ms_async_rdma_receive_buffers << dendl;
+    if (n_bufs_allocated + nbufs > (unsigned)manager->context->m_rdma_config_->m_rdma_receive_buffers_bytes_) {
+        std::cout << __func__ << " WARNING: OUT OF RX BUFFERS: allocated: " << n_bufs_allocated << " requested: " << nbufs
+                  << " limit: " << manager->context->m_rdma_config_->m_rdma_receive_buffers_bytes_ << std::endl;
         return false;
     }
 
@@ -770,27 +757,27 @@ std::mutex &Infiniband::MemoryManager::PoolAllocator::get_lock() {
 char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_size) {
     kassert(g_ctx);
     MemoryManager *manager = g_ctx->manager;
-    RDMAConfig *rdmaConig = manager->rdmaConig;
-    size_t chunk_buffer_size = sizeof(Chunk) + rdmaConig->_conf->ms_async_rdma_buffer_size;
+    Context *context = manager->context;
+    size_t chunk_buffer_size = sizeof(Chunk) + context->m_rdma_config_->m_rdma_buffer_size_bytes_;
     size_t chunk_buffer_number = block_size / chunk_buffer_size;
 
     if (!g_ctx->can_alloc(chunk_buffer_number)) return NULL;
 
     mem_info *minfo = static_cast<mem_info *>(manager->malloc(block_size + sizeof(mem_info)));
     if (!minfo) {
-        lderr(rdmaConig) << __func__ << " failed to allocate " << chunk_buffer_number
-                         << " buffers "
-                            " Its block size is : "
-                         << block_size + sizeof(mem_info) << dendl;
+        std::cout << __func__ << " failed to allocate " << chunk_buffer_number
+                  << " buffers "
+                     " Its block size is : "
+                  << block_size + sizeof(mem_info) << std::endl;
         return NULL;
     }
 
     minfo->mr = ibv_reg_mr(manager->pd->pd, minfo->chunks, block_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
     if (minfo->mr == NULL) {
-        lderr(rdmaConig) << __func__ << " failed to do rdma memory registration " << block_size
-                         << " bytes. "
-                            " relase allocated memory now."
-                         << dendl;
+        std::cout << __func__ << " failed to do rdma memory registration " << block_size
+                  << " bytes. "
+                     " relase allocated memory now."
+                  << std::endl;
         manager->free(minfo);
         return NULL;
     }
@@ -805,7 +792,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
     /* initialize chunks */
     Chunk *chunk = minfo->chunks;
     for (unsigned i = 0; i < chunk_buffer_number; i++) {
-        new (chunk) Chunk(minfo->mr, rdmaConig->_conf->ms_async_rdma_buffer_size, chunk->data, 0, 0, minfo->mr->lkey);
+        new (chunk) Chunk(minfo->mr, context->m_rdma_config_->m_rdma_buffer_size_bytes_, chunk->data, 0, 0, minfo->mr->lkey);
         chunk = reinterpret_cast<Chunk *>(reinterpret_cast<char *>(chunk) + chunk_buffer_size);
     }
 
@@ -814,7 +801,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
 
 void Infiniband::MemoryManager::PoolAllocator::free(char *const block) {
     mem_info *m;
-    std::lock_guard l{get_lock()};
+    std::lock_guard<std::mutex> l{get_lock()};
 
     Chunk *mem_info_chunk = reinterpret_cast<Chunk *>(block);
     m = reinterpret_cast<mem_info *>(reinterpret_cast<char *>(mem_info_chunk) - offsetof(mem_info, chunks));
@@ -823,23 +810,23 @@ void Infiniband::MemoryManager::PoolAllocator::free(char *const block) {
     m->ctx->manager->free(m);
 }
 
-Infiniband::MemoryManager::MemoryManager(RDMAConfig *c, Device *d, ProtectionDomain *p)
-    : rdmaConig(c),
+Infiniband::MemoryManager::MemoryManager(Context *c, Device *d, ProtectionDomain *p)
+    : context(c),
       device(d),
       pd(p),
       rxbuf_pool_ctx(this),
-      rxbuf_pool(&rxbuf_pool_ctx, sizeof(Chunk) + c->_conf->ms_async_rdma_buffer_size,
-                 c->_conf->ms_async_rdma_receive_buffers > 0 ?
-                                                             // if possible make initial pool size 2 * receive_queue_len
-                                                             // that way there will be no pool expansion upon receive of the
-                                                             // first packet.
-                     (c->_conf->ms_async_rdma_receive_buffers < 2 * c->_conf->ms_async_rdma_receive_queue_len
-                          ? c->_conf->ms_async_rdma_receive_buffers
-                          : 2 * c->_conf->ms_async_rdma_receive_queue_len)
-                                                             :
-                                                             // rx pool is infinite, we can set any initial size that we want
-                     2 * c->_conf->ms_async_rdma_receive_queue_len,
-                 device->device_attr.max_mr_size / (sizeof(Chunk) + rdmaConig->_conf->ms_async_rdma_buffer_size)) {}
+      rxbuf_pool(&rxbuf_pool_ctx, sizeof(Chunk) + c->m_rdma_config_->m_rdma_buffer_size_bytes_,
+                 c->m_rdma_config_->m_rdma_receive_buffers_bytes_ > 0 ?
+                                                                      // if possible make initial pool size 2 * receive_queue_len
+                                                                      // that way there will be no pool expansion upon receive of the
+                                                                      // first packet.
+                     (c->m_rdma_config_->m_rdma_receive_buffers_bytes_ < 2 * c->m_rdma_config_->m_rdma_receive_queue_len_
+                          ? c->m_rdma_config_->m_rdma_receive_buffers_bytes_
+                          : 2 * c->m_rdma_config_->m_rdma_receive_queue_len_)
+                                                                      :
+                                                                      // rx pool is infinite, we can set any initial size that we want
+                     2 * c->m_rdma_config_->m_rdma_receive_queue_len_,
+                 device->get_device_attr()->max_mr_size / (sizeof(Chunk) + context->m_rdma_config_->m_rdma_buffer_size_bytes_)) {}
 
 Infiniband::MemoryManager::~MemoryManager() {
     if (send) delete send;
@@ -869,14 +856,14 @@ void Infiniband::MemoryManager::huge_pages_free(void *ptr) {
 }
 
 void *Infiniband::MemoryManager::malloc(size_t size) {
-    if (rdmaConig->_conf->ms_async_rdma_enable_hugepage)
+    if (context->m_rdma_config_->m_rdma_enable_hugepage_)
         return huge_pages_malloc(size);
     else
         return std::malloc(size);
 }
 
 void Infiniband::MemoryManager::free(void *ptr) {
-    if (rdmaConig->_conf->ms_async_rdma_enable_hugepage)
+    if (context->m_rdma_config_->m_rdma_enable_hugepage_)
         huge_pages_free(ptr);
     else
         std::free(ptr);
@@ -896,16 +883,15 @@ int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk *> &c, size_t 
 
 static std::atomic<bool> init_prereq = {false};
 
-void Infiniband::verify_prereq(RDMAConfig *rdmaConig) {
+void Infiniband::verify_prereq(Context *context) {
     int rc = 0;
-    ldout(rdmaConig, 20) << __func__ << " ms_async_rdma_enable_hugepage value is: " << rdmaConig->_conf->ms_async_rdma_enable_hugepage << dendl;
-    if (rdmaConig->_conf->ms_async_rdma_enable_hugepage) {
+    std::cout << __func__ << " ms_async_rdma_enable_hugepage value is: " << context->m_rdma_config_->m_rdma_enable_hugepage_ << std::endl;
+    if (context->m_rdma_config_->m_rdma_enable_hugepage_) {
         rc = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
-        ldout(rdmaConig, 0) << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") << dendl;
+        std::cout << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") << std::endl;
         if (rc) {
-            lderr(rdmaConig) << __func__
-                             << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts."
-                             << dendl;
+            std::cout << __func__ << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts."
+                      << std::endl;
             abort();
         }
     }
@@ -913,7 +899,7 @@ void Infiniband::verify_prereq(RDMAConfig *rdmaConig) {
     // On RDMA MUST be called before fork
     rc = ibv_fork_init();
     if (rc) {
-        lderr(rdmaConig) << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << dendl;
+        std::cout << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << std::endl;
         abort();
     }
 
@@ -921,75 +907,76 @@ void Infiniband::verify_prereq(RDMAConfig *rdmaConig) {
     struct rlimit limit;
     getrlimit(RLIMIT_MEMLOCK, &limit);
     if (limit.rlim_cur != RLIM_INFINITY || limit.rlim_max != RLIM_INFINITY) {
-        lderr(rdmaConig)
+        std::cout
             << __func__
             << "!!! WARNING !!! For RDMA to work properly user memlock (ulimit -l) must be big enough to allow large amount of registered memory."
                " We recommend setting this parameter to infinity"
-            << dendl;
+            << std::endl;
     }
     init_prereq = true;
 }
 
-Infiniband::Infiniband(RDMAConfig *rdmaConig)
-    : rdmaConig(rdmaConig), device_name(rdmaConig->_conf->ms_async_rdma_device_name), port_num(rdmaConig->_conf->ms_async_rdma_port_num) {
-    if (!init_prereq) verify_prereq(rdmaConig);
-    ldout(rdmaConig, 20) << __func__ << " constructing Infiniband..." << dendl;
+Infiniband::Infiniband(Context *context)
+    : context(context), device_name(context->m_rdma_config_->m_rdma_device_name_), port_num(context->m_rdma_config_->m_rdma_port_num_) {
+    if (!init_prereq) verify_prereq(context);
+    std::cout << __func__ << " constructing Infiniband..." << std::endl;
 }
 
 void Infiniband::init() {
-    std::lock_guard l{lock};
+    std::lock_guard<std::mutex> l{lock};
 
     if (initialized) return;
 
-    device_list = new DeviceList(rdmaConig);
+    device_list = new DeviceList(context);
     initialized = true;
 
     device = device_list->get_device(device_name.c_str());
     kassert(device);
-    device->binding_port(rdmaConig, port_num);
-    ib_physical_port = device->active_port->get_port_num();
-    pd = new ProtectionDomain(rdmaConig, device);
-    kassert(std::NetHandler(rdmaConig).set_nonblock(device->ctxt->async_fd) == 0);
+    device->binding_port(context, port_num);
+    ib_physical_port = device->get_port()->get_port_num();
+    pd = new ProtectionDomain(context, device);
+    kassert(Network::NetHandler(context).set_nonblock(device->get_context()->async_fd) == 0);
 
-    support_srq = rdmaConig->_conf->ms_async_rdma_support_srq;
+    support_srq = context->m_rdma_config_->m_rdma_support_srq_;
     if (support_srq) {
-        kassert(device->device_attr.max_srq);
-        rx_queue_len = device->device_attr.max_srq_wr;
+        kassert(device->get_device_attr()->max_srq);
+        rx_queue_len = device->get_device_attr()->max_srq_wr;
     } else
-        rx_queue_len = device->device_attr.max_qp_wr;
-    if (rx_queue_len > rdmaConig->_conf->ms_async_rdma_receive_queue_len) {
-        rx_queue_len = rdmaConig->_conf->ms_async_rdma_receive_queue_len;
-        ldout(rdmaConig, 1) << __func__ << " assigning: " << rx_queue_len << " receive buffers" << dendl;
+        rx_queue_len = device->get_device_attr()->max_qp_wr;
+    if (rx_queue_len > context->m_rdma_config_->m_rdma_receive_queue_len_) {
+        rx_queue_len = context->m_rdma_config_->m_rdma_receive_queue_len_;
+        std::cout << __func__ << " assigning: " << rx_queue_len << " receive buffers" << std::endl;
     } else {
-        ldout(rdmaConig, 0) << __func__ << " using the max allowed receive buffers: " << rx_queue_len << dendl;
+        std::cout << __func__ << " using the max allowed receive buffers: " << rx_queue_len << std::endl;
     }
 
     // check for the misconfiguration
-    if (rdmaConig->_conf->ms_async_rdma_receive_buffers > 0 && rx_queue_len > (unsigned)rdmaConig->_conf->ms_async_rdma_receive_buffers) {
-        lderr(rdmaConig) << __func__ << " rdma_receive_queue_len (" << rx_queue_len << ") > ms_async_rdma_receive_buffers("
-                         << rdmaConig->_conf->ms_async_rdma_receive_buffers << ")." << dendl;
+    if (context->m_rdma_config_->m_rdma_receive_buffers_bytes_ > 0 &&
+        rx_queue_len > (unsigned)context->m_rdma_config_->m_rdma_receive_buffers_bytes_) {
+        std::cout << __func__ << " rdma_receive_queue_len (" << rx_queue_len << ") > m_rdma_receive_buffers_bytes_("
+                  << context->m_rdma_config_->m_rdma_receive_buffers_bytes_ << ")." << std::endl;
         abort();
     }
 
     // Keep extra one WR for a beacon to indicate all WCEs were consumed
-    tx_queue_len = device->device_attr.max_qp_wr - 1;
-    if (tx_queue_len > rdmaConig->_conf->ms_async_rdma_send_buffers) {
-        tx_queue_len = rdmaConig->_conf->ms_async_rdma_send_buffers;
-        ldout(rdmaConig, 1) << __func__ << " assigning: " << tx_queue_len << " send buffers" << dendl;
+    tx_queue_len = device->get_device_attr()->max_qp_wr - 1;
+    if (tx_queue_len > context->m_rdma_config_->m_rdma_send_buffers_) {
+        tx_queue_len = context->m_rdma_config_->m_rdma_send_buffers_;
+        std::cout << __func__ << " assigning: " << tx_queue_len << " send buffers" << std::endl;
     } else {
-        ldout(rdmaConig, 0) << __func__ << " using the max allowed send buffers: " << tx_queue_len << dendl;
+        std::cout << __func__ << " using the max allowed send buffers: " << tx_queue_len << std::endl;
     }
 
     // check for the memory region size misconfiguration
-    if ((uint64_t)rdmaConig->_conf->ms_async_rdma_buffer_size * tx_queue_len > device->device_attr.max_mr_size) {
-        lderr(rdmaConig) << __func__ << " Out of max memory region size " << dendl;
+    if ((uint64_t)context->m_rdma_config_->m_rdma_buffer_size_bytes_ * tx_queue_len > device->get_device_attr()->max_mr_size) {
+        std::cout << __func__ << " Out of max memory region size " << std::endl;
         abort();
     }
 
-    ldout(rdmaConig, 1) << __func__ << " device allow " << device->device_attr.max_cqe << " completion entries" << dendl;
+    std::cout << __func__ << " device allow " << device->get_device_attr()->max_cqe << " completion entries" << std::endl;
 
-    memory_manager = new MemoryManager(rdmaConig, device, pd);
-    memory_manager->create_tx_pool(rdmaConig->_conf->ms_async_rdma_buffer_size, tx_queue_len);
+    memory_manager = new MemoryManager(context, device, pd);
+    memory_manager->create_tx_pool(context->m_rdma_config_->m_rdma_buffer_size_bytes_, tx_queue_len);
 
     if (support_srq) {
         srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
@@ -1019,7 +1006,7 @@ ibv_srq *Infiniband::create_shared_receive_queue(uint32_t max_wr, uint32_t max_s
     ibv_srq_init_attr sia;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(&sia, 0, sizeof(sia));
-    sia.srq_context = device->ctxt;
+    sia.srq_context = device->get_context();
     sia.attr.max_wr = max_wr;
     sia.attr.max_sge = max_sge;
     return ibv_create_srq(pd->pd, &sia);
@@ -1037,9 +1024,9 @@ int Infiniband::get_tx_buffers(std::vector<Chunk *> &c, size_t bytes) { return m
  *      QueuePair on success or NULL if init fails
  * See QueuePair::QueuePair for parameter documentation.
  */
-Infiniband::QueuePair *Infiniband::create_queue_pair(RDMAConfig *rdmaConig, CompletionQueue *tx, CompletionQueue *rx, ibv_qp_type type,
+Infiniband::QueuePair *Infiniband::create_queue_pair(Context *context, CompletionQueue *tx, CompletionQueue *rx, ibv_qp_type type,
                                                      struct rdma_cm_id *cm_id) {
-    Infiniband::QueuePair *qp = new QueuePair(rdmaConig, *this, type, ib_physical_port, srq, tx, rx, tx_queue_len, rx_queue_len, cm_id);
+    Infiniband::QueuePair *qp = new QueuePair(context, *this, type, ib_physical_port, srq, tx, rx, tx_queue_len, rx_queue_len, cm_id);
     if (qp->init()) {
         delete qp;
         return NULL;
@@ -1060,8 +1047,7 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
     while (i < rq_wr_num) {
         chunk = get_memory_manager()->get_rx_buffer();
         if (chunk == nullptr) {
-            lderr(rdmaConig) << __func__ << " WARNING: out of memory. Request " << rq_wr_num << " rx buffers. Only get " << i << " rx buffers."
-                             << dendl;
+            std::cout << __func__ << " WARNING: out of memory. Request " << rq_wr_num << " rx buffers. Only get " << i << " rx buffers." << std::endl;
             if (i == 0) {
                 ::free(rx_work_request);
                 ::free(isge);
@@ -1103,7 +1089,7 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
     return i;
 }
 
-Infiniband::CompletionChannel *Infiniband::create_comp_channel(RDMAConfig *c) {
+Infiniband::CompletionChannel *Infiniband::create_comp_channel(Context *c) {
     Infiniband::CompletionChannel *cc = new Infiniband::CompletionChannel(c, *this);
     if (cc->init()) {
         delete cc;
@@ -1112,8 +1098,8 @@ Infiniband::CompletionChannel *Infiniband::create_comp_channel(RDMAConfig *c) {
     return cc;
 }
 
-Infiniband::CompletionQueue *Infiniband::create_comp_queue(RDMAConfig *rdmaConig, CompletionChannel *cc) {
-    Infiniband::CompletionQueue *cq = new Infiniband::CompletionQueue(rdmaConig, *this, CQ_DEPTH, cc);
+Infiniband::CompletionQueue *Infiniband::create_comp_queue(Context *context, CompletionChannel *cc) {
+    Infiniband::CompletionQueue *cq = new Infiniband::CompletionQueue(context, *this, CQ_DEPTH, cc);
     if (cq->init()) {
         delete cq;
         return NULL;
@@ -1122,9 +1108,9 @@ Infiniband::CompletionQueue *Infiniband::create_comp_queue(RDMAConfig *rdmaConig
 }
 
 Infiniband::QueuePair::~QueuePair() {
-    ldout(rdmaConig, 20) << __func__ << " destroy Queue Pair, qp number: " << qp->qp_num << " left SQ WR " << recv_queue.size() << dendl;
+    std::cout << __func__ << " destroy Queue Pair, qp number: " << qp->qp_num << " left SQ WR " << recv_queue.size() << std::endl;
     if (qp) {
-        ldout(rdmaConig, 20) << __func__ << " destroy qp=" << qp << dendl;
+        std::cout << __func__ << " destroy qp=" << qp << std::endl;
         kassert(!ibv_destroy_qp(qp));
     }
 

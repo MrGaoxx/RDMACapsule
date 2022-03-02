@@ -23,11 +23,12 @@
 #include <atomic>
 #include <boost/pool/pool.hpp>
 #include <functional>
+//#include <mutex>
 #include <string>
 #include <vector>
 
+#include "common/common.h"
 #include "common/perf_counters.h"
-#include "include/common.h"
 #include "network/net_handler.h"
 
 #define HUGE_PAGE_SIZE_2MB (2 * 1024 * 1024)
@@ -37,6 +38,8 @@
 #define PSN_MSK ((1 << PSN_LEN) - 1)
 
 #define BEACON_WRID 0xDEADBEEF  // used for destory QP
+
+using common::PerfCounter::PerfCounters;
 
 struct ib_cm_meta_t {
     uint16_t lid;
@@ -50,7 +53,7 @@ class RDMAStack;
 
 class Port {
    public:
-    explicit Port(RDMAConfig *rdmaConig, struct ibv_context *ictxt, uint8_t ipn);
+    explicit Port(Context *context, struct ibv_context *ictxt, uint8_t ipn);
     uint16_t get_lid() { return lid; }
     ibv_gid get_gid() { return gid; }
     int get_port_num() { return port_num; }
@@ -68,8 +71,8 @@ class Port {
 
 class Device {
    public:
-    explicit Device(RDMAConfig *c, ibv_device *ib_dev);
-    explicit Device(RDMAConfig *c, ibv_context *ib_ctx);
+    explicit Device(Context *c, ibv_device *ib_dev);
+    explicit Device(Context *c, ibv_context *ib_ctx);
     ~Device() {
         if (active_port) {
             delete active_port;
@@ -80,7 +83,16 @@ class Device {
     uint16_t get_lid() { return active_port->get_lid(); }
     ibv_gid get_gid() { return active_port->get_gid(); }
     int get_gid_idx() { return active_port->get_gid_idx(); }
-    void binding_port(RDMAConfig *c, int port_num);
+    void binding_port(Context *c, int port_num);
+    struct ibv_context *get_context() {
+        return ctxt;
+    };
+    struct ibv_device_attr *get_device_attr() {
+        return &device_attr;
+    }
+    struct Port *get_port() {
+        return active_port;
+    }
 
    private:
     ibv_device *device;
@@ -98,21 +110,21 @@ class DeviceList {
     Device **devices;
 
    public:
-    explicit DeviceList(RDMAConfig *rdmaConig) : device_list(nullptr), device_context_list(nullptr), num(0), devices(nullptr) {
+    explicit DeviceList(Context *context) : device_list(nullptr), device_context_list(nullptr), num(0), devices(nullptr) {
         device_list = ibv_get_device_list(&num);
         kassert(device_list);
         kassert(num);
-        if (rdmaConig->_conf->ms_async_rdma_cm) {
+        if (context->m_rdma_config_->m_use_rdma_cm_) {
             device_context_list = rdma_get_devices(NULL);
             kassert(device_context_list);
         }
         devices = new Device *[num];
 
         for (int i = 0; i < num; ++i) {
-            if (rdmaConig->_conf->ms_async_rdma_cm) {
-                devices[i] = new Device(rdmaConig, device_context_list[i]);
+            if (context->m_rdma_config_->m_use_rdma_cm_) {
+                devices[i] = new Device(context, device_context_list[i]);
             } else {
-                devices[i] = new Device(rdmaConig, device_list[i]);
+                devices[i] = new Device(context, device_list[i]);
             }
         }
     }
@@ -186,7 +198,7 @@ class Infiniband {
    public:
     class ProtectionDomain {
        public:
-        explicit ProtectionDomain(RDMAConfig *rdmaConig, Device *device);
+        explicit ProtectionDomain(Context *context, Device *device);
         ~ProtectionDomain();
 
         ibv_pd *const pd;
@@ -281,7 +293,7 @@ class Infiniband {
 
             template <typename Func>
             static std::invoke_result_t<Func> with_context(MemPoolContext *ctx, Func &&func) {
-                std::lock_guard l{get_lock()};
+                std::lock_guard<std::mutex> l{get_lock()};
                 g_ctx = ctx;
                 scope_guard reset_ctx{[] { g_ctx = nullptr; }};
                 return std::move(func)();
@@ -296,7 +308,7 @@ class Infiniband {
          * modify boost pool so that it is possible to
          * have a thread safe 'context' when allocating/freeing
          * the memory. It is needed to allow a different pool
-         * configurations and bookkeeping per RDMAConfig and
+         * configurations and bookkeeping per Context and
          * also to be able to use same allocator to deal with
          * RX and TX pool.
          * TODO: use boost pool to allocate TX chunks too
@@ -319,7 +331,7 @@ class Infiniband {
             }
         };
 
-        MemoryManager(RDMAConfig *c, Device *d, ProtectionDomain *p);
+        MemoryManager(Context *c, Device *d, ProtectionDomain *p);
         ~MemoryManager();
 
         void *malloc(size_t size);
@@ -334,19 +346,19 @@ class Infiniband {
         uint32_t get_tx_buffer_size() const { return send->buffer_size; }
 
         Chunk *get_rx_buffer() {
-            std::lock_guard l{rxbuf_pool.lock};
+            std::lock_guard<std::mutex> l{rxbuf_pool.lock};
             return reinterpret_cast<Chunk *>(rxbuf_pool.malloc());
         }
 
         void release_rx_buffer(Chunk *chunk) {
-            std::lock_guard l{rxbuf_pool.lock};
+            std::lock_guard<std::mutex> l{rxbuf_pool.lock};
             chunk->clear_qp();
             rxbuf_pool.free(chunk);
         }
 
         void set_rx_stat_logger(PerfCounters *logger) { rxbuf_pool_ctx.set_stat_logger(logger); }
 
-        RDMAConfig *rdmaConig;
+        Context *context;
 
        private:
         // TODO: Cluster -> TxPool txbuf_pool
@@ -372,7 +384,7 @@ class Infiniband {
     Device *device = NULL;
     ProtectionDomain *pd = NULL;
     DeviceList *device_list = nullptr;
-    RDMAConfig *rdmaConig;
+    Context *context;
     std::mutex lock;
     bool initialized = false;
     const std::string &device_name;
@@ -380,21 +392,21 @@ class Infiniband {
     bool support_srq = false;
 
    public:
-    explicit Infiniband(RDMAConfig *c);
+    explicit Infiniband(Context *c);
     ~Infiniband();
     void init();
-    static void verify_prereq(RDMAConfig *rdmaConig);
+    static void verify_prereq(Context *context);
 
     class CompletionChannel {
         static const uint32_t MAX_ACK_EVENT = 5000;
-        RDMAConfig *rdmaConig;
+        Context *context;
         Infiniband &infiniband;
         ibv_comp_channel *channel;
         ibv_cq *cq;
         uint32_t cq_events_that_need_ack;
 
        public:
-        CompletionChannel(RDMAConfig *c, Infiniband &ib);
+        CompletionChannel(Context *c, Infiniband &ib);
         ~CompletionChannel();
         int init();
         bool get_cq_event();
@@ -410,8 +422,8 @@ class Infiniband {
     // You need to call init and it will create a cq and associate to comp channel
     class CompletionQueue {
        public:
-        CompletionQueue(RDMAConfig *c, Infiniband &ib, const uint32_t qd, CompletionChannel *cc)
-            : rdmaConig(c), infiniband(ib), channel(cc), cq(NULL), queue_depth(qd) {}
+        CompletionQueue(Context *c, Infiniband &ib, const uint32_t qd, CompletionChannel *cc)
+            : context(c), infiniband(ib), channel(cc), cq(NULL), queue_depth(qd) {}
         ~CompletionQueue();
         int init();
         int poll_cq(int num_entries, ibv_wc *ret_wc_array);
@@ -421,7 +433,7 @@ class Infiniband {
         CompletionChannel *get_cc() const { return channel; }
 
        private:
-        RDMAConfig *rdmaConig;
+        Context *context;
         Infiniband &infiniband;  // Infiniband to which this QP belongs
         CompletionChannel *channel;
         ibv_cq *cq;
@@ -437,7 +449,7 @@ class Infiniband {
     class QueuePair {
        public:
         typedef MemoryManager::Chunk Chunk;
-        QueuePair(RDMAConfig *c, Infiniband &infiniband, ibv_qp_type type, int ib_physical_port, ibv_srq *srq, Infiniband::CompletionQueue *txcq,
+        QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type type, int ib_physical_port, ibv_srq *srq, Infiniband::CompletionQueue *txcq,
                   Infiniband::CompletionQueue *rxcq, uint32_t tx_queue_len, uint32_t max_recv_wr, struct rdma_cm_id *cid, uint32_t q_key = 0);
         ~QueuePair();
 
@@ -476,8 +488,8 @@ class Infiniband {
         /*
          * send/receive connection management meta data
          */
-        int send_cm_meta(RDMAConfig *rdmaConig, int socket_fd);
-        int recv_cm_meta(RDMAConfig *rdmaConig, int socket_fd);
+        int send_cm_meta(Context *context, int socket_fd);
+        int recv_cm_meta(Context *context, int socket_fd);
         void wire_gid_to_gid(const char *wgid, ib_cm_meta_t *cm_meta_data);
         void gid_to_wire_gid(const ib_cm_meta_t &cm_meta_data, char wgid[]);
         ibv_qp *get_qp() const { return qp; }
@@ -490,14 +502,14 @@ class Infiniband {
         void add_rq_wr(Chunk *chunk) {
             if (srq) return;
 
-            std::lock_guard l{lock};
+            std::lock_guard<std::mutex> l{lock};
             recv_queue.push_back(chunk);
         }
 
         void remove_rq_wr(Chunk *chunk) {
             if (srq) return;
 
-            std::lock_guard l{lock};
+            std::lock_guard<std::mutex> l{lock};
             auto it = std::find(recv_queue.begin(), recv_queue.end(), chunk);
             kassert(it != recv_queue.end());
             recv_queue.erase(it);
@@ -505,7 +517,7 @@ class Infiniband {
         ibv_srq *get_srq() const { return srq; }
 
        private:
-        RDMAConfig *rdmaConig;
+        Context *context;
         Infiniband &infiniband;  // Infiniband to which this QP belongs
         ibv_qp_type type;        // QP type (IBV_QPT_RC, etc.)
         ibv_context *ctxt;       // device context of the HCA to use
@@ -530,7 +542,7 @@ class Infiniband {
    public:
     typedef MemoryManager::Cluster Cluster;
     typedef MemoryManager::Chunk Chunk;
-    QueuePair *create_queue_pair(RDMAConfig *c, CompletionQueue *tx, CompletionQueue *rx, ibv_qp_type type, struct rdma_cm_id *cm_id);
+    QueuePair *create_queue_pair(Context *c, CompletionQueue *tx, CompletionQueue *rx, ibv_qp_type type, struct rdma_cm_id *cm_id);
     ibv_srq *create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
     // post rx buffers to srq, return number of buffers actually posted
     int post_chunks_to_rq(int num, QueuePair *qp = nullptr);
@@ -542,14 +554,14 @@ class Infiniband {
         get_memory_manager()->release_rx_buffer(chunk);
     }
     int get_tx_buffers(std::vector<Chunk *> &c, size_t bytes);
-    CompletionChannel *create_comp_channel(RDMAConfig *c);
-    CompletionQueue *create_comp_queue(RDMAConfig *c, CompletionChannel *cc = NULL);
+    CompletionChannel *create_comp_channel(Context *c);
+    CompletionQueue *create_comp_queue(Context *c, CompletionChannel *cc = NULL);
     uint8_t get_ib_physical_port() { return ib_physical_port; }
     uint16_t get_lid() { return device->get_lid(); }
     ibv_gid get_gid() { return device->get_gid(); }
     MemoryManager *get_memory_manager() { return memory_manager; }
     Device *get_device() { return device; }
-    int get_async_fd() { return device->ctxt->async_fd; }
+    int get_async_fd() { return device->get_context()->async_fd; }
     bool is_tx_buffer(const char *c) { return memory_manager->is_tx_buffer(c); }
     Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
     static const char *wc_status_to_string(int status);

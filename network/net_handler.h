@@ -14,19 +14,19 @@
  *
  */
 
-#ifndef CEPH_COMMON_NET_UTILS_H
-#define CEPH_COMMON_NET_UTILS_H
-#include "common/config.h"
+#ifndef NEYWORK_NET_HANDLER_H
+#define NETWORK_NET_HANDLER_H
+#include "common/common.h"
 
-namespace ceph {
+namespace Network {
 class NetHandler {
     int generic_connect(const entity_addr_t &addr, const entity_addr_t &bind_addr, bool nonblock);
 
-    Configure *config;
+    Context *ctx;
 
    public:
     int create_socket(int domain, bool reuse_addr = false);
-    explicit NetHandler(Configure *c) : config(c) {}
+    explicit NetHandler(Context *c) : ctx(c) {}
     int set_nonblock(int sd);
     int set_socket_options(int sd, bool nodelay, int size);
     int connect(const entity_addr_t &addr, const entity_addr_t &bind_addr);
@@ -42,6 +42,6 @@ class NetHandler {
     int nonblock_connect(const entity_addr_t &addr, const entity_addr_t &bind_addr);
     void set_priority(int sd, int priority, int domain);
 };
-}  // namespace ceph
+}  // namespace Network
 
 #endif

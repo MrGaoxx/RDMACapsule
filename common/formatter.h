@@ -14,7 +14,7 @@
 //#include "include/buffer_fwd.h"
 //#include "include/int_types.h"
 
-namespace RDMACapsule {
+namespace common {
 
 struct FormatterAttrs {
     std::list<std::pair<std::string, std::string> > attrs;
@@ -49,7 +49,7 @@ class Formatter {
     virtual ~Formatter();
 
     virtual void enable_line_break() = 0;
-    // virtual void flush(std::ostream &os) = 0;
+    virtual void flush(std::ostream &os) = 0;
     // void flush(bufferlist &bl);
     virtual void reset() = 0;
 
@@ -108,7 +108,7 @@ class JSONFormatter : public Formatter {
     void output_footer() override{};
     void enable_line_break() override { m_line_break_enabled = true; }
     void flush(std::ostream &os) override;
-    using Formatter::flush;  // don't hide Formatter::flush(bufferlist &bl)
+    // using Formatter::flush;  // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
     void open_array_section(std::string_view name) override;
     void open_array_section_in_ns(std::string_view name, const char *ns) override;
@@ -173,7 +173,7 @@ class XMLFormatter : public Formatter {
 
     void enable_line_break() override { m_line_break_enabled = true; }
     void flush(std::ostream &os) override;
-    using Formatter::flush;  // don't hide Formatter::flush(bufferlist &bl)
+    // using Formatter::flush;  // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
     void open_array_section(std::string_view name) override;
     void open_array_section_in_ns(std::string_view name, const char *ns) override;
@@ -225,7 +225,7 @@ class TableFormatter : public Formatter {
     void output_footer() override{};
     void enable_line_break() override{};
     void flush(std::ostream &os) override;
-    using Formatter::flush;  // don't hide Formatter::flush(bufferlist &bl)
+    // using Formatter::flush;  // don't hide Formatter::flush(bufferlist &bl)
     void reset() override;
     void open_array_section(std::string_view name) override;
     void open_array_section_in_ns(std::string_view name, const char *ns) override;
@@ -269,5 +269,5 @@ class TableFormatter : public Formatter {
 
 std::string fixed_to_string(int64_t num, int scale);
 std::string fixed_u_to_string(uint64_t num, int scale);
-}  // namespace RDMACapsule
+}  // namespace common
 #endif

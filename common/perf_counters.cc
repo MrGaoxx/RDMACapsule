@@ -135,7 +135,7 @@ PerfCounters::~PerfCounters() {}
 
 void PerfCounters::inc(int idx, uint64_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -153,7 +153,7 @@ void PerfCounters::inc(int idx, uint64_t amt) {
 
 void PerfCounters::dec(int idx, uint64_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -166,7 +166,7 @@ void PerfCounters::dec(int idx, uint64_t amt) {
 
 void PerfCounters::set(int idx, uint64_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -186,7 +186,7 @@ void PerfCounters::set(int idx, uint64_t amt) {
 
 uint64_t PerfCounters::get(int idx) const {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return 0;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return 0;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -198,7 +198,7 @@ uint64_t PerfCounters::get(int idx) const {
 
 void PerfCounters::tinc(int idx, utime_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -216,7 +216,7 @@ void PerfCounters::tinc(int idx, utime_t amt) {
 
 void PerfCounters::tinc(int idx, common::timespan amt) {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -234,7 +234,7 @@ void PerfCounters::tinc(int idx, common::timespan amt) {
 
 void PerfCounters::tset(int idx, utime_t amt) {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -247,7 +247,7 @@ void PerfCounters::tset(int idx, utime_t amt) {
 
 utime_t PerfCounters::tget(int idx) const {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return utime_t();
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return utime_t();
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -260,7 +260,7 @@ utime_t PerfCounters::tget(int idx) const {
 
 void PerfCounters::hinc(int idx, int64_t x, int64_t y) {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return;
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return;
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -275,7 +275,7 @@ void PerfCounters::hinc(int idx, int64_t x, int64_t y) {
 
 pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const {
 #ifndef WITH_SEASTAR
-    if (!m_config->_conf->perf) return make_pair(0, 0);
+    if (!mm_rdma_config_ig->m_rdma_config_->perf) return make_pair(0, 0);
 #endif
 
     ceph_assert(idx > m_lower_bound);
@@ -353,9 +353,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema, bool histog
             }
             f->dump_int("priority", get_adjusted_priority(d->prio));
 
-            if (d->unit == UNIT_NONE) {
+            if (d->unit == unit_t::UNIT_NONE) {
                 f->dump_string("units", "none");
-            } else if (d->unit == UNIT_BYTES) {
+            } else if (d->unit == unit_t::UNIT_BYTES) {
                 f->dump_string("units", "bytes");
             }
             f->close_section();
@@ -405,7 +405,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema, bool histog
 const std::string &PerfCounters::get_name() const { return m_name; }
 
 PerfCounters::PerfCounters(Configure *config, const std::string &name, int lower_bound, int upper_bound)
-    : m_config(config),
+    : mm_rdma_config_ig(config),
       m_lower_bound(lower_bound),
       m_upper_bound(upper_bound),
       m_name(name)
@@ -446,11 +446,11 @@ void PerfCountersBuilder::add_time_avg(int idx, const char *name, const char *de
     add_impl(idx, name, description, nick, prio, PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_u64_counter_histogram(int idx, const char *name, PerfHistogramCommon::axis_config_d x_axis_config,
-                                                    PerfHistogramCommon::axis_config_d y_axis_config, const char *description, const char *nick,
-                                                    int prio, int unit) {
+void PerfCountersBuilder::add_u64_counter_histogram(int idx, const char *name, PerfHistogramCommon::axism_rdma_config_ig_d x_axism_rdma_config_ig,
+                                                    PerfHistogramCommon::axism_rdma_config_ig_d y_axism_rdma_config_ig, const char *description,
+                                                    const char *nick, int prio, int unit) {
     add_impl(idx, name, description, nick, prio, PERFCOUNTER_U64 | PERFCOUNTER_HISTOGRAM | PERFCOUNTER_COUNTER, unit,
-             std::unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axis_config, y_axis_config}});
+             std::unique_ptr<PerfHistogram<>>{new PerfHistogram<>{x_axism_rdma_config_ig, y_axism_rdma_config_ig}});
 }
 
 void PerfCountersBuilder::add_impl(int idx, const char *name, const char *description, const char *nick, int prio, int ty, int unit,

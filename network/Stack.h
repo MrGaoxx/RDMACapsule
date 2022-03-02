@@ -14,13 +14,13 @@
  *
  */
 
-#ifndef CEPH_MSG_ASYNC_STACK_H
-#define CEPH_MSG_ASYNC_STACK_H
+#ifndef NETWORK_STACK_H
+#define NETWORK_STACK_H
 
+#include "common/buffer.h"
 #include "common/perf_counters.h"
-#include "include/spinlock.h"
-#include "msg/async/Event.h"
-#include "msg/msg_types.h"
+#include "common/types.h"
+#include "network/Event.h"
 
 class Worker;
 class ConnectedSocketImpl {
@@ -28,7 +28,7 @@ class ConnectedSocketImpl {
     virtual ~ConnectedSocketImpl() {}
     virtual int is_connected() = 0;
     virtual ssize_t read(char *, size_t) = 0;
-    virtual ssize_t send(ceph::buffer::list &bl, bool more) = 0;
+    virtual ssize_t send(BufferList &bl, bool more) = 0;
     virtual void shutdown() = 0;
     virtual void close() = 0;
     virtual int fd() const = 0;
@@ -89,7 +89,7 @@ class ConnectedSocket {
     /// Gets the output stream.
     ///
     /// Gets an object that sends data to the remote endpoint.
-    ssize_t send(ceph::buffer::list &bl, bool more) { return _csi->send(bl, more); }
+    ssize_t send(BufferList &bl, bool more) { return _csi->send(bl, more); }
     /// Disables output to the socket.
     ///
     /// Current or future writes that have not been successfully flushed
@@ -190,7 +190,7 @@ class Worker {
    public:
     bool done = false;
 
-    Configure *config;
+    Context *context;
     PerfCounters *perf_logger;
     unsigned id;
 
@@ -200,11 +200,11 @@ class Worker {
     Worker(const Worker &) = delete;
     Worker &operator=(const Worker &) = delete;
 
-    Worker(Configure *c, unsigned worker_id) : config(c), perf_logger(NULL), id(worker_id), references(0), center(c) {
+    Worker(Context *c, unsigned worker_id) : context(c), perf_logger(NULL), id(worker_id), references(0), center(c) {
         char name[128];
         sprintf(name, "AsyncMessenger::Worker-%u", id);
         // initialize perf_logger
-        PerfCountersBuilder plb(config, name, l_msgr_first, l_msgr_last);
+        common::PerfCounter::PerfCountersBuilder plb(context, name, l_msgr_first, l_msgr_last);
 
         plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
         plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
@@ -222,11 +222,11 @@ class Worker {
         plb.add_time_avg(l_msgr_handle_ack_lat, "msgr_handle_ack_lat", "Connection handle ack lat");
 
         perf_logger = plb.create_perf_counters();
-        config->get_perfcounters_collection()->add(perf_logger);
+        context->get_perfcounters_collection()->add(perf_logger);
     }
     virtual ~Worker() {
         if (perf_logger) {
-            config->get_perfcounters_collection()->remove(perf_logger);
+            context->get_perfcounters_collection()->remove(perf_logger);
             delete perf_logger;
         }
     }
@@ -270,7 +270,7 @@ class NetworkStack {
 
     std::function<void()> add_thread(Worker *w);
 
-    virtual Worker *create_worker(Configure *c, unsigned i) = 0;
+    virtual Worker *create_worker(Context *c, unsigned i) = 0;
     virtual void rename_thread(unsigned id) {
         static constexpr int TASK_COMM_LEN = 16;
         char tp_name[TASK_COMM_LEN];
@@ -279,10 +279,10 @@ class NetworkStack {
     }
 
    protected:
-    Configure *config;
+    Context *context;
     std::vector<Worker *> workers;
 
-    explicit NetworkStack(Configure *c);
+    explicit NetworkStack(Context *c);
 
    public:
     NetworkStack(const NetworkStack &) = delete;
@@ -291,7 +291,7 @@ class NetworkStack {
         for (auto &&w : workers) delete w;
     }
 
-    static std::shared_ptr<NetworkStack> create(Configure *c, const std::string &type);
+    static std::shared_ptr<NetworkStack> create(Context *c, const std::string &type);
 
     // backend need to override this method if backend doesn't support shared
     // listen table.
@@ -317,4 +317,4 @@ class NetworkStack {
     virtual void ready(){};
 };
 
-#endif  // CEPH_MSG_ASYNC_STACK_H
+#endif  // NETWORK_STACK_H

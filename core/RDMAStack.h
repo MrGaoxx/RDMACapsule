@@ -18,9 +18,11 @@
 
 #include <list>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #include "Infiniband.h"
+#include "network/Stack.h"
 
 class RDMAConnectedSocketImpl;
 class RDMAServerSocketImpl;
@@ -32,7 +34,7 @@ class RDMADispatcher {
     typedef Infiniband::QueuePair QueuePair;
 
     std::thread t;
-    RDMAConfig *rdmaConig;
+    Context *context;
     std::shared_ptr<Infiniband> ib;
     Infiniband::CompletionQueue *tx_cq = nullptr;
     Infiniband::CompletionQueue *rx_cq = nullptr;
@@ -40,7 +42,7 @@ class RDMADispatcher {
     bool done = false;
     std::atomic<uint64_t> num_qp_conn = {0};
     // protect `qp_conns`, `dead_queue_pairs`
-    ceph::mutex lock = ceph::make_mutex("RDMADispatcher::lock");
+    std::mutex lock;
     // qp_num -> InfRcConnection
     // The main usage of `qp_conns` is looking up connection by qp_num,
     // so the lifecycle of element in `qp_conns` is the lifecycle of qp.
@@ -54,7 +56,7 @@ class RDMADispatcher {
      *
      * @param qp The qp needed to dead
      */
-    ceph::unordered_map<uint32_t, std::pair<QueuePair *, RDMAConnectedSocketImpl *> > qp_conns;
+    std::unordered_map<uint32_t, std::pair<QueuePair *, RDMAConnectedSocketImpl *> > qp_conns;
 
     /// if a queue pair is closed when transmit buffers are active
     /// on it, the transmit buffers never get returned via tx_cq.  To
@@ -65,7 +67,7 @@ class RDMADispatcher {
 
     std::atomic<uint64_t> num_pending_workers = {0};
     // protect pending workers
-    ceph::mutex w_lock = ceph::make_mutex("RDMADispatcher::for worker pending list");
+    std::mutex w_lock;
     // fixme: lockfree
     std::list<RDMAWorker *> pending_workers;
     void enqueue_dead_qp_lockless(uint32_t qp);
@@ -74,7 +76,7 @@ class RDMADispatcher {
    public:
     PerfCounters *perf_logger;
 
-    explicit RDMADispatcher(RDMAConfig *c, std::shared_ptr<Infiniband> &ib);
+    explicit RDMADispatcher(Context *c, std::shared_ptr<Infiniband> &ib);
     virtual ~RDMADispatcher();
     void handle_async_event();
 
@@ -83,7 +85,7 @@ class RDMADispatcher {
     void polling();
     void register_qp(QueuePair *qp, RDMAConnectedSocketImpl *csi);
     void make_pending_worker(RDMAWorker *w) {
-        std::lock_guard l{w_lock};
+        std::lock_guard<std::mutex> l{w_lock};
         auto it = std::find(pending_workers.begin(), pending_workers.end(), w);
         if (it != pending_workers.end()) return;
         pending_workers.push_back(w);
@@ -128,7 +130,7 @@ class RDMAWorker : public Worker {
 
    public:
     PerfCounters *perf_logger;
-    explicit RDMAWorker(RDMAConfig *c, unsigned i);
+    explicit RDMAWorker(Context *c, unsigned i);
     virtual ~RDMAWorker();
     virtual int listen(entity_addr_t &addr, unsigned addr_slot, const SocketOptions &opts, ServerSocket *) override;
     virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
@@ -158,7 +160,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     typedef Infiniband::CompletionQueue CompletionQueue;
 
    protected:
-    RDMAConfig *rdmaConig;
+    Context *context;
     Infiniband::QueuePair *qp;
     uint32_t peer_qpn = 0;
     uint32_t local_qpn = 0;
@@ -189,7 +191,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
                          const decltype(std::cbegin(pending_bl.buffers())) &end);
 
    public:
-    RDMAConnectedSocketImpl(RDMAConfig *rdmaConig, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w);
+    RDMAConnectedSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w);
     virtual ~RDMAConnectedSocketImpl();
 
     void pass_wc(std::vector<ibv_wc> &&v);
@@ -234,8 +236,8 @@ enum RDMA_CM_STATUS {
 
 class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
    public:
-    RDMAIWARPConnectedSocketImpl(RDMAConfig *rdmaConig, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher,
-                                 RDMAWorker *w, RDMACMInfo *info = nullptr);
+    RDMAIWARPConnectedSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
+                                 RDMACMInfo *info = nullptr);
     ~RDMAIWARPConnectedSocketImpl();
     virtual int try_connect(const entity_addr_t &, const SocketOptions &opt) override;
     virtual void close() override;
@@ -265,7 +267,7 @@ class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
 
 class RDMAServerSocketImpl : public ServerSocketImpl {
    protected:
-    RDMAConfig *rdmaConig;
+    Context *context;
     ceph::NetHandler net;
     int server_setup_socket;
     std::shared_ptr<Infiniband> ib;
@@ -274,7 +276,7 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
     entity_addr_t sa;
 
    public:
-    RDMAServerSocketImpl(RDMAConfig *rdmaConig, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
+    RDMAServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
                          entity_addr_t &a, unsigned slot);
 
     virtual int listen(entity_addr_t &sa, const SocketOptions &opt);
@@ -285,7 +287,7 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 
 class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
    public:
-    RDMAIWARPServerSocketImpl(RDMAConfig *rdmaConig, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
+    RDMAIWARPServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
                               entity_addr_t &addr, unsigned addr_slot);
     virtual int listen(entity_addr_t &sa, const SocketOptions &opt) override;
     virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
@@ -304,10 +306,10 @@ class RDMAStack : public NetworkStack {
 
     std::atomic<bool> fork_finished = {false};
 
-    virtual Worker *create_worker(RDMAConfig *c, unsigned worker_id) override;
+    virtual Worker *create_worker(Context *c, unsigned worker_id) override;
 
    public:
-    explicit RDMAStack(RDMAConfig *rdmaConig);
+    explicit RDMAStack(Context *context);
     virtual ~RDMAStack();
     virtual bool nonblock_connect_need_writable_event() const override { return false; }
 

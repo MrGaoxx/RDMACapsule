@@ -30,7 +30,7 @@
 #define dout_prefix *_dout << "RDMAStack "
 
 RDMADispatcher::~RDMADispatcher() {
-    ldout(rdmaConig, 20) << __func__ << " destructing rdma dispatcher" << dendl;
+    std::cout << __func__ << " destructing rdma dispatcher" << std::endl;
     polling_stop();
 
     kassert(qp_conns.empty());
@@ -38,8 +38,8 @@ RDMADispatcher::~RDMADispatcher() {
     kassert(dead_queue_pairs.empty());
 }
 
-RDMADispatcher::RDMADispatcher(RDMAConfig *c, std::shared_ptr<Infiniband> &ib) : rdmaConig(c), ib(ib) {
-    PerfCountersBuilder plb(rdmaConig, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
+RDMADispatcher::RDMADispatcher(Context *c, std::shared_ptr<Infiniband> &ib) : context(c), ib(ib) {
+    PerfCountersBuilder plb(context, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
 
     plb.add_u64_counter(l_msgr_rdma_polling, "polling", "Whether dispatcher thread is polling");
     plb.add_u64_counter(l_msgr_rdma_inflight_tx_chunks, "inflight_tx_chunks", "The number of inflight tx chunks");
@@ -64,7 +64,7 @@ RDMADispatcher::RDMADispatcher(RDMAConfig *c, std::shared_ptr<Infiniband> &ib) :
     plb.add_u64_counter(l_msgr_rdma_active_queue_pair, "active_queue_pair", "Created queue pair number");
 
     perf_logger = plb.create_perf_counters();
-    rdmaConig->get_perfcounters_collection()->add(perf_logger);
+    context->get_perfcounters_collection()->add(perf_logger);
     Cycles::init();
 }
 
@@ -76,13 +76,13 @@ void RDMADispatcher::polling_start() {
 
     ib->get_memory_manager()->set_rx_stat_logger(perf_logger);
 
-    tx_cc = ib->create_comp_channel(rdmaConig);
+    tx_cc = ib->create_comp_channel(context);
     kassert(tx_cc);
-    rx_cc = ib->create_comp_channel(rdmaConig);
+    rx_cc = ib->create_comp_channel(context);
     kassert(rx_cc);
-    tx_cq = ib->create_comp_queue(rdmaConig, tx_cc);
+    tx_cq = ib->create_comp_queue(context, tx_cc);
     kassert(tx_cq);
-    rx_cq = ib->create_comp_queue(rdmaConig, rx_cc);
+    rx_cq = ib->create_comp_queue(context, rx_cc);
     kassert(rx_cq);
 
     t = std::thread(&RDMADispatcher::polling, this);
@@ -108,22 +108,22 @@ void RDMADispatcher::polling_stop() {
 }
 
 void RDMADispatcher::handle_async_event() {
-    ldout(rdmaConig, 30) << __func__ << dendl;
+    std::cout << __func__ << std::endl;
     while (1) {
         ibv_async_event async_event;
         if (ibv_get_async_event(ib->get_device()->ctxt, &async_event)) {
             if (errno != EAGAIN)
-                lderr(rdmaConig) << __func__ << " ibv_get_async_event failed. (errno=" << errno << " " << cpp_strerror(errno) << ")" << dendl;
+                std::cout << __func__ << " ibv_get_async_event failed. (errno=" << errno << " " << cpp_strerror(errno) << ")" << std::endl;
             return;
         }
         perf_logger->inc(l_msgr_rdma_total_async_events);
-        ldout(rdmaConig, 1) << __func__ << "Event : " << ibv_event_type_str(async_event.event_type) << dendl;
+        std::cout << __func__ << "Event : " << ibv_event_type_str(async_event.event_type) << std::endl;
 
         switch (async_event.event_type) {
             /***********************CQ events********************/
             case IBV_EVENT_CQ_ERR:
-                lderr(rdmaConig) << __func__ << " Fatal Error, effect all QP bound with same CQ, "
-                                 << " CQ Overflow, dev = " << ib->get_device()->ctxt << " Need destroy and recreate resource " << dendl;
+                std::cout << __func__ << " Fatal Error, effect all QP bound with same CQ, "
+                          << " CQ Overflow, dev = " << ib->get_device()->ctxt << " Need destroy and recreate resource " << std::endl;
                 break;
             /***********************QP events********************/
             case IBV_EVENT_QP_FATAL: {
@@ -131,9 +131,9 @@ void RDMADispatcher::handle_async_event() {
                 ibv_qp *ib_qp = async_event.element.qp;
                 uint32_t qpn = ib_qp->qp_num;
                 QueuePair *qp = get_qp(qpn);
-                lderr(rdmaConig) << __func__ << " Fatal Error, event associate qp number: " << qpn
-                                 << " Queue Pair status: " << Infiniband::qp_state_string(qp->get_state())
-                                 << " Event : " << ibv_event_type_str(async_event.event_type) << dendl;
+                std::cout << __func__ << " Fatal Error, event associate qp number: " << qpn
+                          << " Queue Pair status: " << Infiniband::qp_state_string(qp->get_state())
+                          << " Event : " << ibv_event_type_str(async_event.event_type) << std::endl;
             } break;
             case IBV_EVENT_QP_LAST_WQE_REACHED: {
                 /*
@@ -153,17 +153,17 @@ void RDMADispatcher::handle_async_event() {
                 QueuePair *qp = get_qp_lockless(qpn);
 
                 if (qp && !qp->is_dead()) {
-                    lderr(rdmaConig) << __func__ << " QP not dead, event associate qp number: " << qpn
-                                     << " Queue Pair status: " << Infiniband::qp_state_string(qp->get_state())
-                                     << " Event : " << ibv_event_type_str(async_event.event_type) << dendl;
+                    std::cout << __func__ << " QP not dead, event associate qp number: " << qpn
+                              << " Queue Pair status: " << Infiniband::qp_state_string(qp->get_state())
+                              << " Event : " << ibv_event_type_str(async_event.event_type) << std::endl;
                 }
                 if (!conn) {
-                    ldout(rdmaConig, 20) << __func__ << " Connection's QP maybe entered into dead status. "
-                                         << " qp number: " << qpn << dendl;
+                    std::cout << __func__ << " Connection's QP maybe entered into dead status. "
+                              << " qp number: " << qpn << std::endl;
                 } else {
                     conn->fault();
                     if (qp) {
-                        if (!rdmaConig->_conf->ms_async_rdma_cm) {
+                        if (!context->m_rdma_config_->m_use_rdma_cm) {
                             enqueue_dead_qp_lockless(qpn);
                         }
                     }
@@ -221,12 +221,12 @@ void RDMADispatcher::handle_async_event() {
             // CA events:
             case IBV_EVENT_DEVICE_FATAL:
                 /* CA is in FATAL state */
-                lderr(rdmaConig) << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->ctxt
-                                 << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
+                std::cout << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->ctxt
+                          << " evt: " << ibv_event_type_str(async_event.event_type) << std::endl;
                 break;
             default:
-                lderr(rdmaConig) << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->ctxt
-                                 << " unknown event: " << async_event.event_type << dendl;
+                std::cout << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->ctxt << " unknown event: " << async_event.event_type
+                          << std::endl;
                 break;
         }
         ibv_ack_async_event(&async_event);
@@ -250,7 +250,7 @@ void RDMADispatcher::polling() {
 
     std::map<RDMAConnectedSocketImpl *, std::vector<ibv_wc> > polled;
     std::vector<ibv_wc> tx_cqe;
-    ldout(rdmaConig, 20) << __func__ << " going to poll tx cq: " << tx_cq << " rx cq: " << rx_cq << dendl;
+    std::cout << __func__ << " going to poll tx cq: " << tx_cq << " rx cq: " << rx_cq << std::endl;
     uint64_t last_inactive = Cycles::rdtsc();
     bool rearmed = false;
     int r = 0;
@@ -258,13 +258,13 @@ void RDMADispatcher::polling() {
     while (true) {
         int tx_ret = tx_cq->poll_cq(MAX_COMPLETIONS, wc);
         if (tx_ret > 0) {
-            ldout(rdmaConig, 20) << __func__ << " tx completion queue got " << tx_ret << " responses." << dendl;
+            std::cout << __func__ << " tx completion queue got " << tx_ret << " responses." << std::endl;
             handle_tx_event(wc, tx_ret);
         }
 
         int rx_ret = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
         if (rx_ret > 0) {
-            ldout(rdmaConig, 20) << __func__ << " rx completion queue got " << rx_ret << " responses." << dendl;
+            std::cout << __func__ << " rx completion queue got " << rx_ret << " responses." << std::endl;
             handle_rx_event(wc, rx_ret);
         }
 
@@ -289,7 +289,7 @@ void RDMADispatcher::polling() {
 
                 for (auto &qp : dead_qps) {
                     perf_logger->dec(l_msgr_rdma_active_queue_pair);
-                    ldout(rdmaConig, 10) << __func__ << " finally delete qp = " << qp << dendl;
+                    std::cout << __func__ << " finally delete qp = " << qp << std::endl;
                     delete qp;
                 }
             }
@@ -297,7 +297,7 @@ void RDMADispatcher::polling() {
             if (!num_qp_conn && done && dead_queue_pairs.empty()) break;
 
             uint64_t now = Cycles::rdtsc();
-            if (Cycles::to_microseconds(now - last_inactive) > rdmaConig->_conf->ms_async_rdma_polling_us) {
+            if (Cycles::to_microseconds(now - last_inactive) > context->m_rdma_config_->ms_async_rdma_polling_us) {
                 handle_async_event();
                 if (!rearmed) {
                     // Clean up cq events after rearm notify ensure no new incoming event
@@ -321,12 +321,12 @@ void RDMADispatcher::polling() {
                     r = TEMP_FAILURE_RETRY(poll(channel_poll, 2, 100));
                     if (r < 0) {
                         r = -errno;
-                        lderr(rdmaConig) << __func__ << " poll failed " << r << dendl;
+                        std::cout << __func__ << " poll failed " << r << std::endl;
                         abort();
                     }
                 }
-                if (r > 0 && tx_cc->get_cq_event()) ldout(rdmaConig, 20) << __func__ << " got tx cq event." << dendl;
-                if (r > 0 && rx_cc->get_cq_event()) ldout(rdmaConig, 20) << __func__ << " got rx cq event." << dendl;
+                if (r > 0 && tx_cc->get_cq_event()) std::cout << __func__ << " got tx cq event." << std::endl;
+                if (r > 0 && rx_cc->get_cq_event()) std::cout << __func__ << " got rx cq event." << std::endl;
                 last_inactive = Cycles::rdtsc();
                 perf_logger->set(l_msgr_rdma_polling, 1);
                 rearmed = false;
@@ -384,7 +384,7 @@ Infiniband::QueuePair *RDMADispatcher::get_qp(uint32_t qp) {
 void RDMADispatcher::enqueue_dead_qp_lockless(uint32_t qpn) {
     auto it = qp_conns.find(qpn);
     if (it == qp_conns.end()) {
-        lderr(rdmaConig) << __func__ << " QP [" << qpn << "] is not registered." << dendl;
+        std::cout << __func__ << " QP [" << qpn << "] is not registered." << std::endl;
         return;
     }
     QueuePair *qp = it->second.first;
@@ -402,7 +402,7 @@ void RDMADispatcher::schedule_qp_destroy(uint32_t qpn) {
     std::lock_guard l{lock};
     auto it = qp_conns.find(qpn);
     if (it == qp_conns.end()) {
-        lderr(rdmaConig) << __func__ << " QP [" << qpn << "] is not registered." << dendl;
+        std::cout << __func__ << " QP [" << qpn << "] is not registered." << std::endl;
         return;
     }
     QueuePair *qp = it->second.first;
@@ -435,23 +435,23 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
             continue;
         }
 
-        ldout(rdmaConig, 20) << __func__ << " QP number: " << response->qp_num << " len: " << response->byte_len
-                             << " status: " << ib->wc_status_to_string(response->status) << dendl;
+        std::cout << __func__ << " QP number: " << response->qp_num << " len: " << response->byte_len
+                  << " status: " << ib->wc_status_to_string(response->status) << std::endl;
 
         if (response->status != IBV_WC_SUCCESS) {
             switch (response->status) {
                 case IBV_WC_RETRY_EXC_ERR: {
                     perf_logger->inc(l_msgr_rdma_tx_wc_retry_errors);
 
-                    ldout(rdmaConig, 1) << __func__ << " Responder ACK timeout, possible disconnect, or Remote QP in bad state "
-                                        << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status)
-                                        << " WCE QP number " << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex
-                                        << response->wr_id << std::dec << dendl;
+                    std::cout << __func__ << " Responder ACK timeout, possible disconnect, or Remote QP in bad state "
+                              << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status) << " WCE QP number "
+                              << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex << response->wr_id << std::dec
+                              << std::endl;
 
                     std::lock_guard l{lock};
                     RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
                     if (conn) {
-                        ldout(rdmaConig, 1) << __func__ << " SQ WR return error, remote Queue Pair, qp number: " << conn->get_peer_qpn() << dendl;
+                        std::cout << __func__ << " SQ WR return error, remote Queue Pair, qp number: " << conn->get_peer_qpn() << std::endl;
                     }
                 } break;
                 case IBV_WC_WR_FLUSH_ERR: {
@@ -460,37 +460,37 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
                     std::lock_guard l{lock};
                     QueuePair *qp = get_qp_lockless(response->qp_num);
                     if (qp) {
-                        ldout(rdmaConig, 20) << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << dendl;
+                        std::cout << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << std::endl;
                     }
                     if (qp && qp->is_dead()) {
-                        ldout(rdmaConig, 20) << __func__ << " outstanding SQ WR is flushed into CQ since QueuePair is dead " << dendl;
+                        std::cout << __func__ << " outstanding SQ WR is flushed into CQ since QueuePair is dead " << std::endl;
                     } else {
-                        lderr(rdmaConig) << __func__ << " Invalid/Unsupported request to consume outstanding SQ WR,"
-                                         << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status)
-                                         << " WCE QP number " << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex
-                                         << response->wr_id << std::dec << dendl;
+                        std::cout << __func__ << " Invalid/Unsupported request to consume outstanding SQ WR,"
+                                  << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status) << " WCE QP number "
+                                  << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex << response->wr_id << std::dec
+                                  << std::endl;
 
                         RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
                         if (conn) {
-                            ldout(rdmaConig, 1) << __func__ << " SQ WR return error, remote Queue Pair, qp number: " << conn->get_peer_qpn() << dendl;
+                            std::cout << __func__ << " SQ WR return error, remote Queue Pair, qp number: " << conn->get_peer_qpn() << std::endl;
                         }
                     }
                 } break;
 
                 default: {
-                    lderr(rdmaConig) << __func__ << " SQ WR return error,"
-                                     << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status) << " WCE QP number "
-                                     << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex << response->wr_id << std::dec
-                                     << dendl;
+                    std::cout << __func__ << " SQ WR return error,"
+                              << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status) << " WCE QP number "
+                              << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex << response->wr_id << std::dec
+                              << std::endl;
 
                     std::lock_guard l{lock};
                     RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
                     if (conn && conn->is_connected()) {
-                        ldout(rdmaConig, 20) << __func__ << " SQ WR return error Queue Pair error state is : " << conn->get_qp_state()
-                                             << " remote Queue Pair, qp number: " << conn->get_peer_qpn() << dendl;
+                        std::cout << __func__ << " SQ WR return error Queue Pair error state is : " << conn->get_qp_state()
+                                  << " remote Queue Pair, qp number: " << conn->get_peer_qpn() << std::endl;
                         conn->fault();
                     } else {
-                        ldout(rdmaConig, 1) << __func__ << " Disconnected, qp_num = " << response->qp_num << " discard event" << dendl;
+                        std::cout << __func__ << " Disconnected, qp_num = " << response->qp_num << " discard event" << std::endl;
                     }
                 } break;
             }
@@ -503,9 +503,9 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         if (ib->get_memory_manager()->is_valid_chunk(chunk)) {
             tx_chunks.push_back(chunk);
         } else if (reinterpret_cast<QueuePair *>(response->wr_id)->get_local_qp_number() == response->qp_num) {
-            ldout(rdmaConig, 1) << __func__ << " sending of the disconnect msg completed" << dendl;
+            std::cout << __func__ << " sending of the disconnect msg completed" << std::endl;
         } else {
-            ldout(rdmaConig, 1) << __func__ << " not tx buffer, chunk " << chunk << dendl;
+            std::cout << __func__ << " not tx buffer, chunk " << chunk << std::endl;
             abort();
         }
     }
@@ -527,7 +527,7 @@ void RDMADispatcher::post_tx_buffer(std::vector<Chunk *> &chunks) {
 
     inflight -= chunks.size();
     ib->get_memory_manager()->return_tx(chunks);
-    ldout(rdmaConig, 30) << __func__ << " release " << chunks.size() << " chunks, inflight " << inflight << dendl;
+    std::cout << __func__ << " release " << chunks.size() << " chunks, inflight " << inflight << std::endl;
     notify_pending_workers();
 }
 
@@ -548,8 +548,8 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
             case IBV_WC_SUCCESS:
                 kassert(response->opcode == IBV_WC_RECV);
                 if (!conn) {
-                    ldout(rdmaConig, 1) << __func__ << " csi with qpn " << response->qp_num << " may be dead. chunk 0x" << std::hex << chunk
-                                        << " will be back." << std::dec << dendl;
+                    std::cout << __func__ << " csi with qpn " << response->qp_num << " may be dead. chunk 0x" << std::hex << chunk << " will be back."
+                              << std::dec << std::endl;
                     ib->recall_chunk_to_pool(chunk);
                     perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
                 } else {
@@ -567,17 +567,17 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
                 perf_logger->inc(l_msgr_rdma_rx_total_wc_errors);
 
                 if (qp) {
-                    ldout(rdmaConig, 20) << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << dendl;
+                    std::cout << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << std::endl;
                 }
                 if (qp && qp->is_dead()) {
-                    ldout(rdmaConig, 20) << __func__ << " outstanding RQ WR is flushed into CQ since QueuePair is dead " << dendl;
+                    std::cout << __func__ << " outstanding RQ WR is flushed into CQ since QueuePair is dead " << std::endl;
                 } else {
-                    ldout(rdmaConig, 1) << __func__ << " RQ WR return error,"
-                                        << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status)
-                                        << " WCE QP number " << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex
-                                        << response->wr_id << std::dec << dendl;
+                    std::cout << __func__ << " RQ WR return error,"
+                              << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status) << " WCE QP number "
+                              << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex << response->wr_id << std::dec
+                              << std::endl;
                     if (conn) {
-                        ldout(rdmaConig, 1) << __func__ << " RQ WR return error, remote Queue Pair, qp number: " << conn->get_peer_qpn() << dendl;
+                        std::cout << __func__ << " RQ WR return error, remote Queue Pair, qp number: " << conn->get_peer_qpn() << std::endl;
                     }
                 }
 
@@ -588,10 +588,10 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
             default:
                 perf_logger->inc(l_msgr_rdma_rx_total_wc_errors);
 
-                ldout(rdmaConig, 1) << __func__ << " RQ WR return error,"
-                                    << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status) << " WCE QP number "
-                                    << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex << response->wr_id << std::dec
-                                    << dendl;
+                std::cout << __func__ << " RQ WR return error,"
+                          << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status) << " WCE QP number "
+                          << response->qp_num << " Opcode " << response->opcode << " wr_id: 0x" << std::hex << response->wr_id << std::dec
+                          << std::endl;
                 if (conn && conn->is_connected()) conn->fault();
 
                 ib->recall_chunk_to_pool(chunk);
@@ -604,11 +604,11 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
     polled.clear();
 }
 
-RDMAWorker::RDMAWorker(RDMAConfig *c, unsigned worker_id) : Worker(c, worker_id), tx_handler(new C_handle_cq_tx(this)) {
+RDMAWorker::RDMAWorker(Context *c, unsigned worker_id) : Worker(c, worker_id), tx_handler(new C_handle_cq_tx(this)) {
     // initialize perf_logger
     char name[128];
     sprintf(name, "AsyncMessenger::RDMAWorker-%u", id);
-    PerfCountersBuilder plb(rdmaConig, name, l_msgr_rdma_first, l_msgr_rdma_last);
+    PerfCountersBuilder plb(context, name, l_msgr_rdma_first, l_msgr_rdma_last);
 
     plb.add_u64_counter(l_msgr_rdma_tx_no_mem, "tx_no_mem", "The count of no tx buffer");
     plb.add_u64_counter(l_msgr_rdma_tx_parital_mem, "tx_parital_mem", "The count of parital tx buffer");
@@ -621,7 +621,7 @@ RDMAWorker::RDMAWorker(RDMAConfig *c, unsigned worker_id) : Worker(c, worker_id)
     plb.add_u64_counter(l_msgr_rdma_pending_sent_conns, "pending_sent_conns", "The count of pending sent conns");
 
     perf_logger = plb.create_perf_counters();
-    rdmaConig->get_perfcounters_collection()->add(perf_logger);
+    context->get_perfcounters_collection()->add(perf_logger);
 }
 
 RDMAWorker::~RDMAWorker() { delete tx_handler; }
@@ -633,10 +633,10 @@ int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOption
     dispatcher->polling_start();
 
     RDMAServerSocketImpl *p;
-    if (rdmaConig->_conf->ms_async_rdma_type == "iwarp") {
-        p = new RDMAIWARPServerSocketImpl(rdmaConig, ib, dispatcher, this, sa, addr_slot);
+    if (context->m_rdma_config_->ms_async_rdma_type == "iwarp") {
+        p = new RDMAIWARPServerSocketImpl(context, ib, dispatcher, this, sa, addr_slot);
     } else {
-        p = new RDMAServerSocketImpl(rdmaConig, ib, dispatcher, this, sa, addr_slot);
+        p = new RDMAServerSocketImpl(context, ib, dispatcher, this, sa, addr_slot);
     }
     int r = p->listen(sa, opt);
     if (r < 0) {
@@ -653,15 +653,15 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
     dispatcher->polling_start();
 
     RDMAConnectedSocketImpl *p;
-    if (rdmaConig->_conf->ms_async_rdma_type == "iwarp") {
-        p = new RDMAIWARPConnectedSocketImpl(rdmaConig, ib, dispatcher, this);
+    if (context->m_rdma_config_->ms_async_rdma_type == "iwarp") {
+        p = new RDMAIWARPConnectedSocketImpl(context, ib, dispatcher, this);
     } else {
-        p = new RDMAConnectedSocketImpl(rdmaConig, ib, dispatcher, this);
+        p = new RDMAConnectedSocketImpl(context, ib, dispatcher, this);
     }
     int r = p->try_connect(addr, opts);
 
     if (r < 0) {
-        ldout(rdmaConig, 1) << __func__ << " try connecting failed." << dendl;
+        std::cout << __func__ << " try connecting failed." << std::endl;
         delete p;
         return r;
     }
@@ -674,8 +674,7 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk *> &
     kassert(center.in_thread());
     int r = ib->get_tx_buffers(c, bytes);
     size_t got = ib->get_memory_manager()->get_tx_buffer_size() * r;
-    ldout(rdmaConig, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight
-                         << dendl;
+    std::cout << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << std::endl;
     dispatcher->inflight += r;
     if (got >= bytes) return r;
 
@@ -691,12 +690,12 @@ int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk *> &
 }
 
 void RDMAWorker::handle_pending_message() {
-    ldout(rdmaConig, 20) << __func__ << " pending conns " << pending_sent_conns.size() << dendl;
+    std::cout << __func__ << " pending conns " << pending_sent_conns.size() << std::endl;
     while (!pending_sent_conns.empty()) {
         RDMAConnectedSocketImpl *o = pending_sent_conns.front();
         pending_sent_conns.pop_front();
         ssize_t r = o->submit(false);
-        ldout(rdmaConig, 20) << __func__ << " sent pending bl socket=" << o << " r=" << r << dendl;
+        std::cout << __func__ << " sent pending bl socket=" << o << " r=" << r << std::endl;
         if (r < 0) {
             if (r == -EAGAIN) {
                 pending_sent_conns.push_back(o);
@@ -711,19 +710,19 @@ void RDMAWorker::handle_pending_message() {
     dispatcher->notify_pending_workers();
 }
 
-RDMAStack::RDMAStack(RDMAConfig *rdmaConig)
-    : NetworkStack(rdmaConig), ib(std::make_shared<Infiniband>(rdmaConig)), rdma_dispatcher(std::make_shared<RDMADispatcher>(rdmaConig, ib)) {
-    ldout(rdmaConig, 20) << __func__ << " constructing RDMAStack..." << dendl;
-    ldout(rdmaConig, 20) << " creating RDMAStack:" << this << " with dispatcher:" << rdma_dispatcher.get() << dendl;
+RDMAStack::RDMAStack(Context *context)
+    : NetworkStack(context), ib(std::make_shared<Infiniband>(context)), rdma_dispatcher(std::make_shared<RDMADispatcher>(context, ib)) {
+    std::cout << __func__ << " constructing RDMAStack..." << std::endl;
+    std::cout << " creating RDMAStack:" << this << " with dispatcher:" << rdma_dispatcher.get() << std::endl;
 }
 
 RDMAStack::~RDMAStack() {
-    if (rdmaConig->_conf->ms_async_rdma_enable_hugepage) {
+    if (context->m_rdma_config_->ms_async_rdma_enable_hugepage) {
         unsetenv("RDMAV_HUGEPAGES_SAFE");  // remove env variable on destruction
     }
 }
 
-Worker *RDMAStack::create_worker(RDMAConfig *c, unsigned worker_id) {
+Worker *RDMAStack::create_worker(Context *c, unsigned worker_id) {
     auto w = new RDMAWorker(c, worker_id);
     w->set_dispatcher(rdma_dispatcher);
     w->set_ib(ib);

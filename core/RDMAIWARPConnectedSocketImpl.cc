@@ -6,9 +6,9 @@
 #define TIMEOUT_MS 3000
 #define RETRY_COUNT 7
 
-RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(RDMAConfig *rdmaConig, std::shared_ptr<Infiniband> &ib,
+RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib,
                                                            std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w, RDMACMInfo *info)
-    : RDMAConnectedSocketImpl(rdmaConig, ib, rdma_dispatcher, w), cm_con_handler(new C_handle_cm_connection(this)) {
+    : RDMAConnectedSocketImpl(context, ib, rdma_dispatcher, w), cm_con_handler(new C_handle_cm_connection(this)) {
     status = IDLE;
     notify_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     if (info) {
@@ -36,12 +36,12 @@ RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(RDMAConfig *rdmaConig
         cm_channel = rdma_create_event_channel();
         rdma_create_id(cm_channel, &cm_id, NULL, RDMA_PS_TCP);
         status = RDMA_ID_CREATED;
-        ldout(rdmaConig, 20) << __func__ << " successfully created cm id: " << cm_id << dendl;
+        std::cout << __func__ << " successfully created cm id: " << cm_id << std::endl;
     }
 }
 
 RDMAIWARPConnectedSocketImpl::~RDMAIWARPConnectedSocketImpl() {
-    ldout(rdmaConig, 20) << __func__ << " destruct." << dendl;
+    std::cout << __func__ << " destruct." << std::endl;
     std::unique_lock l(close_mtx);
     close_condition.wait(l, [&] { return closed; });
     if (status >= RDMA_ID_CREATED) {
@@ -54,7 +54,7 @@ int RDMAIWARPConnectedSocketImpl::try_connect(const entity_addr_t &peer_addr, co
     worker->center.create_file_event(cm_channel->fd, EVENT_READABLE, cm_con_handler);
     status = CHANNEL_FD_CREATED;
     if (rdma_resolve_addr(cm_id, NULL, const_cast<struct sockaddr *>(peer_addr.get_sockaddr()), TIMEOUT_MS)) {
-        lderr(rdmaConig) << __func__ << " failed to resolve addr" << dendl;
+        std::cout << __func__ << " failed to resolve addr" << std::endl;
         return -1;
     }
     return 0;
@@ -77,13 +77,13 @@ void RDMAIWARPConnectedSocketImpl::shutdown() {
 void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
     struct rdma_cm_event *event;
     rdma_get_cm_event(cm_channel, &event);
-    ldout(rdmaConig, 20) << __func__ << " event name: " << rdma_event_str(event->event) << " (cm id: " << cm_id << ")" << dendl;
+    std::cout << __func__ << " event name: " << rdma_event_str(event->event) << " (cm id: " << cm_id << ")" << std::endl;
     struct rdma_conn_param cm_params;
     switch (event->event) {
         case RDMA_CM_EVENT_ADDR_RESOLVED:
             status = ADDR_RESOLVED;
             if (rdma_resolve_route(cm_id, TIMEOUT_MS)) {
-                lderr(rdmaConig) << __func__ << " failed to resolve rdma addr" << dendl;
+                std::cout << __func__ << " failed to resolve rdma addr" << std::endl;
                 notify();
             }
             break;
@@ -91,7 +91,7 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
         case RDMA_CM_EVENT_ROUTE_RESOLVED:
             status = ROUTE_RESOLVED;
             if (alloc_resource()) {
-                lderr(rdmaConig) << __func__ << " failed to alloc resource while resolving the route" << dendl;
+                std::cout << __func__ << " failed to alloc resource while resolving the route" << std::endl;
                 connected = -ECONNREFUSED;
                 notify();
                 break;
@@ -102,14 +102,14 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
             cm_params.retry_count = RETRY_COUNT;
             cm_params.qp_num = local_qpn;
             if (rdma_connect(cm_id, &cm_params)) {
-                lderr(rdmaConig) << __func__ << " failed to connect remote rdma port" << dendl;
+                std::cout << __func__ << " failed to connect remote rdma port" << std::endl;
                 connected = -ECONNREFUSED;
                 notify();
             }
             break;
 
         case RDMA_CM_EVENT_ESTABLISHED:
-            ldout(rdmaConig, 20) << __func__ << " qp_num=" << cm_id->qp->qp_num << dendl;
+            std::cout << __func__ << " qp_num=" << cm_id->qp->qp_num << std::endl;
             status = CONNECTED;
             if (!is_server) {
                 peer_qpn = event->param.conn.qp_num;
@@ -125,7 +125,7 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
         case RDMA_CM_EVENT_CONNECT_ERROR:
         case RDMA_CM_EVENT_UNREACHABLE:
         case RDMA_CM_EVENT_REJECTED:
-            lderr(rdmaConig) << __func__ << " rdma connection rejected" << dendl;
+            std::cout << __func__ << " rdma connection rejected" << std::endl;
             connected = -ECONNREFUSED;
             notify();
             break;
@@ -150,14 +150,14 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
 }
 
 void RDMAIWARPConnectedSocketImpl::activate() {
-    ldout(rdmaConig, 30) << __func__ << dendl;
+    std::cout << __func__ << std::endl;
     active = true;
     connected = 1;
 }
 
 int RDMAIWARPConnectedSocketImpl::alloc_resource() {
-    ldout(rdmaConig, 30) << __func__ << dendl;
-    qp = ib->create_queue_pair(rdmaConig, dispatcher->get_tx_cq(), dispatcher->get_rx_cq(), IBV_QPT_RC, cm_id);
+    std::cout << __func__ << std::endl;
+    qp = ib->create_queue_pair(context, dispatcher->get_tx_cq(), dispatcher->get_rx_cq(), IBV_QPT_RC, cm_id);
     if (!qp) {
         return -1;
     }
@@ -169,7 +169,7 @@ int RDMAIWARPConnectedSocketImpl::alloc_resource() {
 }
 
 void RDMAIWARPConnectedSocketImpl::close_notify() {
-    ldout(rdmaConig, 30) << __func__ << dendl;
+    std::cout << __func__ << std::endl;
     if (status >= CHANNEL_FD_CREATED) {
         worker->center.delete_file_event(cm_channel->fd, EVENT_READABLE);
     }

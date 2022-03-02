@@ -22,11 +22,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAServerSocketImpl "
 
-RDMAServerSocketImpl::RDMAServerSocketImpl(RDMAConfig *rdmaConig, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher,
+RDMAServerSocketImpl::RDMAServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher,
                                            RDMAWorker *w, entity_addr_t &a, unsigned slot)
     : ServerSocketImpl(a.get_type(), slot),
-      rdmaConig(rdmaConig),
-      net(rdmaConig),
+      context(context),
+      net(context),
       server_setup_socket(-1),
       ib(ib),
       dispatcher(rdma_dispatcher),
@@ -38,7 +38,7 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt) {
     server_setup_socket = net.create_socket(sa.get_family(), true);
     if (server_setup_socket < 0) {
         rc = -errno;
-        lderr(rdmaConig) << __func__ << " failed to create server socket: " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " failed to create server socket: " << cpp_strerror(errno) << std::endl;
         return rc;
     }
 
@@ -55,19 +55,19 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt) {
     rc = ::bind(server_setup_socket, sa.get_sockaddr(), sa.get_sockaddr_len());
     if (rc < 0) {
         rc = -errno;
-        ldout(rdmaConig, 10) << __func__ << " unable to bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << ": " << cpp_strerror(errno)
-                             << dendl;
+        std::cout << __func__ << " unable to bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << ": " << cpp_strerror(errno)
+                  << std::endl;
         goto err;
     }
 
-    rc = ::listen(server_setup_socket, rdmaConig->_conf->ms_tcp_listen_backlog);
+    rc = ::listen(server_setup_socket, context->m_rdma_config_->ms_tcp_listen_backlog);
     if (rc < 0) {
         rc = -errno;
-        lderr(rdmaConig) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(errno) << dendl;
+        std::cout << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(errno) << std::endl;
         goto err;
     }
 
-    ldout(rdmaConig, 20) << __func__ << " bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << dendl;
+    std::cout << __func__ << " bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << std::endl;
     return 0;
 
 err:
@@ -77,7 +77,7 @@ err:
 }
 
 int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
-    ldout(rdmaConig, 15) << __func__ << dendl;
+    std::cout << __func__ << std::endl;
 
     kassert(sock);
 
@@ -108,16 +108,16 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 
     RDMAConnectedSocketImpl *server;
     // Worker* w = dispatcher->get_stack()->get_worker();
-    server = new RDMAConnectedSocketImpl(rdmaConig, ib, dispatcher, dynamic_cast<RDMAWorker *>(w));
+    server = new RDMAConnectedSocketImpl(context, ib, dispatcher, dynamic_cast<RDMAWorker *>(w));
     if (!server->get_qp()) {
-        lderr(rdmaConig) << __func__ << " server->qp is null" << dendl;
+        std::cout << __func__ << " server->qp is null" << std::endl;
         // cann't use delete server here, destructor will fail.
         server->cleanup();
         ::close(sd);
         return -1;
     }
     server->set_accept_fd(sd);
-    ldout(rdmaConig, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
+    std::cout << __func__ << " accepted a new QP, tcp_fd: " << sd << std::endl;
     std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
     *sock = ConnectedSocket(std::move(csi));
 

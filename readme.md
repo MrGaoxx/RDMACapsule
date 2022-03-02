@@ -15,5 +15,5 @@ Here are deisgn principles for the library:
 
 # Milestones
 1. finish the core module
-2. 
+2. provide a branch of lightweight version
 3.

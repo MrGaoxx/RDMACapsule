@@ -21,8 +21,8 @@
 #include <atomic>
 #include <memory>
 
-#include "Formatter.h"
-#include "include/common.h"
+#include "common/common.h"
+#include "common/formatter.h"
 
 class PerfHistogramCommon {
    public:
@@ -31,26 +31,23 @@ class PerfHistogramCommon {
         SCALE_LOG2 = 2,
     };
 
-    struct axis_config_d {
+    struct axism_rdma_config_ig_d {
         const char *m_name = nullptr;
         scale_type_d m_scale_type = scale_type_d::SCALE_LINEAR;
         int64_t m_min = 0;
         int64_t m_quant_size = 0;
         int32_t m_buckets = 0;
-        axis_config_d() = default;
-        axis_config_d(const char *name, scale_type_d scale_type, int64_t min, int64_t quant_size, int32_t buckets)
+        axism_rdma_config_ig_d() = default;
+        axism_rdma_config_ig_d(const char *name, scale_type_d scale_type, int64_t min, int64_t quant_size, int32_t buckets)
             : m_name(name), m_scale_type(scale_type), m_min(min), m_quant_size(quant_size), m_buckets(buckets) {}
     };
 
    protected:
-    /// Dump configuration of one axis to a formatter
-    static void dump_formatted_axis(ceph::Formatter *f, const axis_config_d &ac);
-
     /// Quantize given value and convert to bucket number on given axis
-    static int64_t get_bucket_for_axis(int64_t value, const axis_config_d &ac);
+    static int64_t get_bucket_for_axis(int64_t value, const axism_rdma_config_ig_d &ac);
 
     /// Calculate inclusive ranges of axis values for each bucket on that axis
-    static std::vector<std::pair<int64_t, int64_t>> get_axis_bucket_ranges(const axis_config_d &ac);
+    static std::vector<std::pair<int64_t, int64_t>> get_axis_bucket_ranges(const axism_rdma_config_ig_d &ac);
 };
 
 /// PerfHistogram does trace a histogram of input values. It's an extended
@@ -64,22 +61,22 @@ template <int DIM = 2>
 class PerfHistogram : public PerfHistogramCommon {
    public:
     /// Initialize new histogram object
-    PerfHistogram(std::initializer_list<axis_config_d> axes_config) {
-        ceph_assert(axes_config.size() == DIM && "Invalid number of axis configuration objects");
+    PerfHistogram(std::initializer_list<axism_rdma_config_ig_d> axesm_rdma_config_ig) {
+        ceph_assert(axesm_rdma_config_ig.size() == DIM && "Invalid number of axis configuration objects");
 
         int i = 0;
-        for (const auto &ac : axes_config) {
+        for (const auto &ac : axesm_rdma_config_ig) {
             ceph_assertf(ac.m_buckets > 0, "Must have at least one bucket on axis");
             ceph_assertf(ac.m_quant_size > 0, "Quantization unit must be non-zero positive integer value");
 
-            m_axes_config[i++] = ac;
+            m_axesm_rdma_config_ig[i++] = ac;
         }
 
         m_rawData.reset(new std::atomic<uint64_t>[get_raw_size()] {});
     }
 
     /// Copy from other histogram object
-    PerfHistogram(const PerfHistogram &other) : m_axes_config(other.m_axes_config) {
+    PerfHistogram(const PerfHistogram &other) : m_axesm_rdma_config_ig(other.m_axesm_rdma_config_ig) {
         int64_t size = get_raw_size();
         m_rawData.reset(new std::atomic<uint64_t>[size] {});
         for (int64_t i = 0; i < size; i++) {
@@ -116,26 +113,13 @@ class PerfHistogram : public PerfHistogramCommon {
         return m_rawData[index];
     }
 
-    /// Dump data to a Formatter object
-    void dump_formatted(ceph::Formatter *f) const {
-        // Dump axes configuration
-        f->open_array_section("axes");
-        for (auto &ac : m_axes_config) {
-            dump_formatted_axis(f, ac);
-        }
-        f->close_section();
-
-        // Dump histogram values
-        dump_formatted_values(f);
-    }
-
    protected:
     /// Raw data stored as linear space, internal indexes are calculated on
     /// demand.
     std::unique_ptr<std::atomic<uint64_t>[]> m_rawData;
 
     /// Configuration of axes
-    std::array<axis_config_d, DIM> m_axes_config;
+    std::array<axism_rdma_config_ig_d, DIM> m_axesm_rdma_config_ig;
 
     /// Dump histogram counters to a formatter
     void dump_formatted_values(ceph::Formatter *f) const {
@@ -146,7 +130,7 @@ class PerfHistogram : public PerfHistogramCommon {
     /// Get number of all histogram counters
     int64_t get_raw_size() {
         int64_t ret = 1;
-        for (const auto &ac : m_axes_config) {
+        for (const auto &ac : m_axesm_rdma_config_ig) {
             ret *= ac.m_buckets;
         }
         return ret;
@@ -164,7 +148,7 @@ class PerfHistogram : public PerfHistogramCommon {
     int64_t get_raw_index_for_bucket(T... buckets) const {
         static_assert(sizeof...(T) == DIM, "Incorrect number of arguments");
         return get_raw_index_internal<0>(
-            [](int64_t bucket, const axis_config_d &ac) {
+            [](int64_t bucket, const axism_rdma_config_ig_d &ac) {
                 ceph_assertf(bucket >= 0, "Bucket index can not be negative");
                 ceph_assertf(bucket < ac.m_buckets, "Bucket index too large");
                 return bucket;
@@ -175,7 +159,7 @@ class PerfHistogram : public PerfHistogramCommon {
     template <int level = 0, typename F, typename... T>
     int64_t get_raw_index_internal(F bucket_evaluator, int64_t startIndex, int64_t value, T... tail) const {
         static_assert(level + 1 + sizeof...(T) == DIM, "Internal consistency check");
-        auto &ac = m_axes_config[level];
+        auto &ac = m_axesm_rdma_config_ig[level];
         auto bucket = bucket_evaluator(value, ac);
         return get_raw_index_internal<level + 1>(bucket_evaluator, ac.m_buckets * startIndex + bucket, tail...);
     }
@@ -197,7 +181,7 @@ class PerfHistogram : public PerfHistogramCommon {
         }
 
         onDimensionEnter(level);
-        auto &ac = m_axes_config[level];
+        auto &ac = m_axesm_rdma_config_ig[level];
         startIndex *= ac.m_buckets;
         for (int32_t i = 0; i < ac.m_buckets; ++i, ++startIndex) {
             visit_values(onDimensionEnter, onValue, onDimensionLeave, level + 1, startIndex);

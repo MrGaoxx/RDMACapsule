@@ -15,19 +15,22 @@
 #define LARGE_SIZE 1024
 
 //#include <fmt/format.h>
-#include "Formatter.h"
+#include "common/formatter.h"
 
 #include <algorithm>
 #include <limits>
 #include <set>
+#include <string_view>
 
+#include "common/common.h"
+#include "escape.h"
 //#include "HTMLFormatter.h"
 
 //#include "common/escape.h"
 //#include "include/buffer.h"
 
 // -----------------------
-namespace ceph {
+namespace common {
 
 std::string fixed_u_to_string(uint64_t num, int scale) {
     std::ostringstream t;
@@ -212,7 +215,7 @@ void JSONFormatter::close_section() {
     if (handle_close_section()) {
         return;
     }
-    ceph_assert(!m_stack.empty());
+    kassert(!m_stack.empty());
     finish_pending_string();
 
     struct json_formatter_stack_entry_d &entry = m_stack.back();
@@ -336,7 +339,7 @@ void XMLFormatter::open_array_section_with_attrs(std::string_view name, const Fo
 void XMLFormatter::open_array_section_in_ns(std::string_view name, const char *ns) { open_section_in_ns(name, ns, NULL); }
 
 void XMLFormatter::close_section() {
-    ceph_assert(!m_sections.empty());
+    kassert(!m_sections.empty());
     finish_pending_string();
 
     std::string section = m_sections.back();
@@ -538,7 +541,7 @@ void TableFormatter::flush(std::ostream &os) {
                     os << "|";
 
                     for (size_t j = 0; j < m_vec[i].size(); j++) {
-                        os << fmt::format(" {:<{}}|", m_vec[i][j].first, m_column_size[j] + 2);
+                        // os << fmt::format(" {:<{}}|", m_vec[i][j].first, m_column_size[j] + 2);
                     }
                     os << "\n";
                     os << "+";
@@ -562,7 +565,7 @@ void TableFormatter::flush(std::ostream &os) {
                 os << m_vec[i][j].second;
                 os << "\" ";
             } else {
-                os << fmt::format("{:<{}}|", m_vec[i][j].second, m_column_size[j] + 2);
+                // os << fmt::format("{:<{}}|", m_vec[i][j].second, m_column_size[j] + 2);
             }
         }
 
@@ -752,4 +755,4 @@ void TableFormatter::finish_pending_string() {
         dump_string(pending_name.c_str(), ss);
     }
 }
-}  // namespace ceph
+}  // namespace common

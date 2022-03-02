@@ -20,8 +20,10 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
+
 //#include "common/ceph_mutex.h"
 //#include "common/ceph_time.h"
 //#include "common/perf_histogram.h"
@@ -78,9 +80,9 @@ class PerfCountersBuilder {
     void add_u64_avg(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0, int unit = UNIT_NONE);
     void add_time(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0);
     void add_time_avg(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0);
-    void add_u64_counter_histogram(int key, const char *name, PerfHistogramCommon::axis_config_d x_axis_config,
-                                   PerfHistogramCommon::axis_config_d y_axis_config, const char *description = NULL, const char *nick = NULL,
-                                   int prio = 0, int unit = UNIT_NONE);
+    void add_u64_counter_histogram(int key, const char *name, PerfHistogramCommon::axism_rdma_config_ig_d x_axism_rdma_config_ig,
+                                   PerfHistogramCommon::axism_rdma_config_ig_d y_axism_rdma_config_ig, const char *description = NULL,
+                                   const char *nick = NULL, int prio = 0, int unit = UNIT_NONE);
 
     void set_prio_default(int prio_) { prio_default = prio_; }
 
@@ -227,7 +229,7 @@ class PerfCounters {
 
     typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
-    Configure *m_config;
+    Configure *mm_rdma_config_ig;
     int m_lower_bound;
     int m_upper_bound;
     std::string m_name;

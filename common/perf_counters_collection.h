@@ -1,21 +1,24 @@
 #pragma once
 
+#include <functional>
 #include <mutex>
 
+#include "common/formatter.h"
 #include "perf_counters.h"
-namespace common {
+
+namespace common::PerfCounter {
 class PerfCountersCollection {
-    Configure *m_config;
+    Context *m_context;
 
     /** Protects perf_impl->m_loggers */
     mutable std::mutex m_lock;
-    PerfCountersCollectionImpl perf_impl;
+    PerfCounter::PerfCountersCollectionImpl perf_impl;
 
    public:
-    PerfCountersCollection(Configure *config);
+    PerfCountersCollection(Context *context);
     ~PerfCountersCollection();
-    void add(PerfCounters *l);
-    void remove(PerfCounters *l);
+    void add(PerfCounter::PerfCounters *l);
+    void remove(PerfCounter::PerfCounters *l);
     void clear();
     bool reset(const std::string &name);
 
@@ -28,12 +31,12 @@ class PerfCountersCollection {
 };
 
 class PerfCountersDeleter {
-    Configure *config;
+    Context *config;
 
    public:
     PerfCountersDeleter() noexcept : config(nullptr) {}
-    PerfCountersDeleter(Configure *config) noexcept : config(config) {}
+    PerfCountersDeleter(Context *config) noexcept : config(config) {}
     void operator()(PerfCounters *p) noexcept;
 };
-}  // namespace common
-using PerfCountersRef = std::unique_ptr<common::PerfCounters, common::PerfCountersDeleter>;
+}  // namespace common::PerfCounter
+using PerfCountersRef = std::unique_ptr<common::PerfCounter::PerfCounters, common::PerfCounter::PerfCountersDeleter>;

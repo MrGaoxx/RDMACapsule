@@ -14,8 +14,8 @@
  *
  */
 
-#ifndef CEPH_MSG_EVENTEPOLL_H
-#define CEPH_MSG_EVENTEPOLL_H
+#ifndef NETWORK_EVENTEPOLL_H
+#define NETWORK_EVENTEPOLL_H
 
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -25,11 +25,11 @@
 class EpollDriver : public EventDriver {
     int epfd;
     struct epoll_event *events;
-    Configure *config;
+    Context *config;
     int nevent;
 
    public:
-    explicit EpollDriver(Configure *c) : epfd(-1), events(NULL), config(c), nevent(0) {}
+    explicit EpollDriver(Context *c) : epfd(-1), events(NULL), config(c), nevent(0) {}
     ~EpollDriver() override {
         if (epfd != -1) close(epfd);
 

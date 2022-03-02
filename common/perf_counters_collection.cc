@@ -2,9 +2,9 @@
 
 #include "common.h"
 
-namespace common {
+namespace common::Perfcounter {
 /* PerfcounterCollection hold the lock for PerfCounterCollectionImp */
-PerfCountersCollection::PerfCountersCollection(Configure *config) : m_config(config), m_lock() {}
+PerfCountersCollection::PerfCountersCollection(Context *context) : m_context(context), m_lock() {}
 PerfCountersCollection::~PerfCountersCollection() { clear(); }
 void PerfCountersCollection::add(PerfCounters *l) {
     std::lock_guard lck(m_lock);
@@ -39,4 +39,4 @@ void PerfCountersDeleter::operator()(PerfCounters *p) noexcept {
     delete p;
 }
 
-}  // namespace common
+}  // namespace common::Perfcounter
