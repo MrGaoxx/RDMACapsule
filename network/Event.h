@@ -26,6 +26,7 @@
 #include <condition_variable>
 #include <mutex>
 
+#include "common/common_time.h"
 #include "net_handler.h"
 
 #define EVENT_NONE 0
@@ -134,7 +135,7 @@ class EventCenter {
     };
 
    private:
-    Configure *config;
+    Context *context;
     std::string type;
     int nevent;
     // Used only to external event
@@ -153,20 +154,20 @@ class EventCenter {
     uint64_t time_event_next_id;
     int notify_receive_fd;
     int notify_send_fd;
-    ceph::NetHandler net;
+    Network::NetHandler net;
     EventCallbackRef notify_handler;
     unsigned center_id;
     AssociatedCenters *global_centers = nullptr;
 
     int process_time_events();
     FileEvent *_get_file_event(int fd) {
-        ceph_assert(fd < nevent);
+        kassert(fd < nevent);
         return &file_events[fd];
     }
 
    public:
-    explicit EventCenter(Configure *c)
-        : config(c),
+    explicit EventCenter(Context *c)
+        : context(c),
           nevent(0),
           external_num_events(0),
           driver(NULL),

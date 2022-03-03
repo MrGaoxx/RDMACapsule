@@ -62,12 +62,12 @@ class PerfHistogram : public PerfHistogramCommon {
    public:
     /// Initialize new histogram object
     PerfHistogram(std::initializer_list<axism_rdma_config_ig_d> axesm_rdma_config_ig) {
-        ceph_assert(axesm_rdma_config_ig.size() == DIM && "Invalid number of axis configuration objects");
+        kassert(axesm_rdma_config_ig.size() == DIM);
 
         int i = 0;
         for (const auto &ac : axesm_rdma_config_ig) {
-            ceph_assertf(ac.m_buckets > 0, "Must have at least one bucket on axis");
-            ceph_assertf(ac.m_quant_size > 0, "Quantization unit must be non-zero positive integer value");
+            kassert(ac.m_buckets > 0);
+            kassert(ac.m_quant_size > 0);
 
             m_axesm_rdma_config_ig[i++] = ac;
         }
@@ -121,12 +121,6 @@ class PerfHistogram : public PerfHistogramCommon {
     /// Configuration of axes
     std::array<axism_rdma_config_ig_d, DIM> m_axesm_rdma_config_ig;
 
-    /// Dump histogram counters to a formatter
-    void dump_formatted_values(ceph::Formatter *f) const {
-        visit_values([f](int) { f->open_array_section("values"); }, [f](int64_t value) { f->dump_unsigned("value", value); },
-                     [f](int) { f->close_section(); });
-    }
-
     /// Get number of all histogram counters
     int64_t get_raw_size() {
         int64_t ret = 1;
@@ -149,8 +143,8 @@ class PerfHistogram : public PerfHistogramCommon {
         static_assert(sizeof...(T) == DIM, "Incorrect number of arguments");
         return get_raw_index_internal<0>(
             [](int64_t bucket, const axism_rdma_config_ig_d &ac) {
-                ceph_assertf(bucket >= 0, "Bucket index can not be negative");
-                ceph_assertf(bucket < ac.m_buckets, "Bucket index too large");
+                kassert(bucket >= 0);
+                kassertf(bucket < ac.m_buckets);
                 return bucket;
             },
             0, buckets...);

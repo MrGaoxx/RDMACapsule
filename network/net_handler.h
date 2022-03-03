@@ -22,11 +22,11 @@ namespace Network {
 class NetHandler {
     int generic_connect(const entity_addr_t &addr, const entity_addr_t &bind_addr, bool nonblock);
 
-    Context *ctx;
+    Context *context;
 
    public:
     int create_socket(int domain, bool reuse_addr = false);
-    explicit NetHandler(Context *c) : ctx(c) {}
+    explicit NetHandler(Context *c) : context(c) {}
     int set_nonblock(int sd);
     int set_socket_options(int sd, bool nodelay, int size);
     int connect(const entity_addr_t &addr, const entity_addr_t &bind_addr);

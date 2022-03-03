@@ -16,6 +16,7 @@
 #include "common_time.h"
 
 #include <chrono>
+#include <map>
 
 namespace common {
 using std::chrono::nanoseconds;
@@ -168,87 +169,6 @@ std::string exact_timespan_str(timespan t) {
     return ss.str();
 }
 
-std::chrono::seconds parse_timespan(const std::string& s) {
-    static std::map<std::string, int> units = {
-        {"s", 1},
-        {"sec", 1},
-        {"second", 1},
-        {"seconds", 1},
-        {"m", 60},
-        {"min", 60},
-        {"minute", 60},
-        {"minutes", 60},
-        {"h", 60 * 60},
-        {"hr", 60 * 60},
-        {"hour", 60 * 60},
-        {"hours", 60 * 60},
-        {"d", 24 * 60 * 60},
-        {"day", 24 * 60 * 60},
-        {"days", 24 * 60 * 60},
-        {"w", 7 * 24 * 60 * 60},
-        {"wk", 7 * 24 * 60 * 60},
-        {"week", 7 * 24 * 60 * 60},
-        {"weeks", 7 * 24 * 60 * 60},
-        {"mo", 30 * 24 * 60 * 60},
-        {"month", 30 * 24 * 60 * 60},
-        {"months", 30 * 24 * 60 * 60},
-        {"y", 365 * 24 * 60 * 60},
-        {"yr", 365 * 24 * 60 * 60},
-        {"year", 365 * 24 * 60 * 60},
-        {"years", 365 * 24 * 60 * 60},
-    };
-
-    auto r = 0s;
-    auto pos = 0u;
-    while (pos < s.size()) {
-        // skip whitespace
-        while (std::isspace(s[pos])) {
-            ++pos;
-        }
-        if (pos >= s.size()) {
-            break;
-        }
-
-        // consume any digits
-        auto val_start = pos;
-        while (std::isdigit(s[pos])) {
-            ++pos;
-        }
-        if (val_start == pos) {
-            throw std::invalid_argument("expected digit");
-        }
-        auto n = s.substr(val_start, pos - val_start);
-        std::string err;
-        auto val = strict_strtoll(n.c_str(), 10, &err);
-        if (err.size()) {
-            throw std::invalid_argument(err);
-        }
-
-        // skip whitespace
-        while (std::isspace(s[pos])) {
-            ++pos;
-        }
-
-        // consume unit
-        auto unit_start = pos;
-        while (std::isalpha(s[pos])) {
-            ++pos;
-        }
-        if (unit_start != pos) {
-            auto unit = s.substr(unit_start, pos - unit_start);
-            auto p = units.find(unit);
-            if (p == units.end()) {
-                throw std::invalid_argument("unrecogized unit '"s + unit + "'");
-            }
-            val *= p->second;
-        } else if (pos < s.size()) {
-            throw std::invalid_argument("unexpected trailing '"s + s.substr(pos) + "'");
-        }
-        r += std::chrono::seconds(val);
-    }
-    return r;
-}
-
 }  // namespace common
 
 namespace std {
@@ -263,9 +183,9 @@ ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t) {
     return m;
 }
 
-template ostream& operator<<<::ceph::timespan::rep, ::ceph::timespan::period>(ostream&, const ::ceph::timespan&);
+template ostream& operator<<<common::timespan::rep, common::timespan::period>(ostream&, const ::common::timespan&);
 
-template ostream& operator<<<::ceph::signedspan::rep, ::ceph::signedspan::period>(ostream&, const ::ceph::signedspan&);
+template ostream& operator<<<common::signedspan::rep, common::signedspan::period>(ostream&, const ::common::signedspan&);
 
 template ostream& operator<<<chrono::seconds::rep, chrono::seconds::period>(ostream&, const chrono::seconds&);
 

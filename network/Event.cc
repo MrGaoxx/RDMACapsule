@@ -28,10 +28,10 @@
 #define dout_prefix *_dout << "EventCallback "
 class C_handle_notify : public EventCallback {
     EventCenter *center;
-    Context *config;
+    Context *context;
 
    public:
-    C_handle_notify(EventCenter *c, Context *cc) : center(c), config(cc) {}
+    C_handle_notify(EventCenter *c, Context *cc) : center(c), context(cc) {}
     void do_request(uint64_t fd_or_id) override {
         char c[256];
         int r = 0;
@@ -93,10 +93,10 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type) {
 
     if (type == "dpdk") {
 #ifdef HAVE_DPDK
-        driver = new DPDKDriver(config);
+        driver = new DPDKDriver(context);
 #endif
     } else {
-        driver = new EpollDriver(config);
+        driver = new EpollDriver(context);
     }
 
     if (!driver) {
@@ -162,11 +162,11 @@ void EventCenter::set_owner() {
     std::cout << __func__ << " center_id=" << center_id << " owner=" << owner << std::endl;
     if (!global_centers) {
         global_centers =
-            &config->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>("AsyncMessenger::EventCenter::global_center::" + type, true);
+            &context->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>("AsyncMessenger::EventCenter::global_center::" + type, true);
         kassert(global_centers);
         global_centers->centers[center_id] = this;
         if (driver->need_wakeup()) {
-            notify_handler = new C_handle_notify(this, config);
+            notify_handler = new C_handle_notify(this, context);
             int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
             kassert(r == 0);
         }
@@ -277,7 +277,7 @@ void EventCenter::wakeup() {
     // No need to wake up since we never sleep
     if (!pollers.empty() || !driver->need_wakeup()) return;
 
-    ldout(config, 20) << __func__ << std::endl;
+    std::cout << __func__ << std::endl;
     char buf = 'c';
 // wake up "event_wait"
 #ifdef _WIN32

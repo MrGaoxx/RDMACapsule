@@ -14,14 +14,19 @@
 
 #ifndef COMMON_TIME_H
 #define COMMON_TIME_H
-
+#include <math.h>
+#include <stdlib.h>
 #include <sys/time.h>
 
 #include <chrono>
+#include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <optional>
 #include <string>
 
+#include "common/buffer.h"
+#include "common/formatter.h"
 struct timespec;
 
 namespace common {
@@ -65,7 +70,7 @@ struct timeval to_timeval(Duration d) {
 
 // One potential issue is that we should accept system_clock
 // timepoints in user-facing APIs alongside (or instead of)
-// ceph::real_clock times.
+// common::real_clock times.
 
 // High-resolution real-time clock
 class real_clock {
@@ -298,7 +303,7 @@ typedef coarse_real_clock::time_point coarse_real_time;
 // Monotonic times should never be serialized or communicated
 // between machines, since they are incomparable. Thus we also don't
 // make any provision for converting between
-// std::chrono::steady_clock time and ceph::mono_clock time.
+// std::chrono::steady_clock time and common::mono_clock time.
 typedef mono_clock::time_point mono_time;
 typedef coarse_mono_clock::time_point coarse_mono_time;
 
@@ -353,7 +358,7 @@ inline signedspan operator-(coarse_mono_time minuend, coarse_mono_time subtrahen
 inline timespan abs(signedspan z) { return z > signedspan::zero() ? std::chrono::duration_cast<timespan>(z) : timespan(-z.count()); }
 inline timespan to_timespan(signedspan z) {
     if (z < signedspan::zero()) {
-        // ceph_assert(z >= signedspan::zero());
+        // common_assert(z >= signedspan::zero());
         //  There is a kernel bug that seems to be triggering this assert.  We've
         //  seen it in:
         //    centos 8.1: 4.18.0-147.el8.x86_64
@@ -361,8 +366,8 @@ inline timespan to_timespan(signedspan z) {
         //    debian 10.1: 4.19.67-2+deb10u1
         //    ubuntu 18.04
         //  see bugs:
-        //    https://tracker.ceph.com/issues/43365
-        //    https://tracker.ceph.com/issues/44078
+        //    https://tracker.common.com/issues/43365
+        //    https://tracker.common.com/issues/44078
         z = signedspan::zero();
     }
     return std::chrono::duration_cast<timespan>(z);
@@ -370,7 +375,6 @@ inline timespan to_timespan(signedspan z) {
 
 std::string timespan_str(timespan t);
 std::string exact_timespan_str(timespan t);
-std::chrono::seconds parse_timespan(const std::string& s);
 
 // detects presence of Clock::to_timespec() and from_timespec()
 template <typename Clock, typename = std::void_t<>>
@@ -400,4 +404,317 @@ template <typename Rep, typename Period>
 ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t);
 }
 
-#endif  // COMMON_CEPH_TIME_H
+inline uint32_t cap_to_u32_max(uint64_t t) { return std::min(t, (uint64_t)std::numeric_limits<uint32_t>::max()); }
+
+class utime_t {
+   public:
+    struct {
+        uint32_t tv_sec, tv_nsec;
+    } tv;
+
+   public:
+    bool is_zero() const { return (tv.tv_sec == 0) && (tv.tv_nsec == 0); }
+
+    void normalize() {
+        if (tv.tv_nsec > 1000000000ul) {
+            tv.tv_sec = cap_to_u32_max(tv.tv_sec + tv.tv_nsec / (1000000000ul));
+            tv.tv_nsec %= 1000000000ul;
+        }
+    }
+
+    // cons
+    utime_t() {
+        tv.tv_sec = 0;
+        tv.tv_nsec = 0;
+    }
+    utime_t(time_t s, int n) {
+        tv.tv_sec = s;
+        tv.tv_nsec = n;
+        normalize();
+    }
+    utime_t(const struct timespec& v) { decode_timeval(&v); }
+    utime_t(const struct timespec v) {
+        // NOTE: this is used by common_clock_now() so should be kept
+        // as thin as possible.
+        tv.tv_sec = v.tv_sec;
+        tv.tv_nsec = v.tv_nsec;
+    }
+    // conversion from common::real_time/coarse_real_time
+    template <typename Clock, typename std::enable_if_t<common::converts_to_timespec_v<Clock>>* = nullptr>
+    explicit utime_t(const std::chrono::time_point<Clock>& t) : utime_t(Clock::to_timespec(t)) {}  // forward to timespec ctor
+
+    template <class Rep, class Period>
+    explicit utime_t(const std::chrono::duration<Rep, Period>& dur) {
+        using common_t = std::common_type_t<Rep, int>;
+        tv.tv_sec = std::max<common_t>(std::chrono::duration_cast<std::chrono::seconds>(dur).count(), 0);
+        tv.tv_nsec = std::max<common_t>((std::chrono::duration_cast<std::chrono::nanoseconds>(dur) % std::chrono::seconds(1)).count(), 0);
+    }
+#if defined(WITH_SEASTAR)
+    explicit utime_t(const seastar::lowres_system_clock::time_point& t) {
+        tv.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(t.time_since_epoch()).count();
+        tv.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(t.time_since_epoch() % std::chrono::seconds(1)).count();
+    }
+    explicit operator seastar::lowres_system_clock::time_point() const noexcept {
+        using clock_t = seastar::lowres_system_clock;
+        return clock_t::time_point{
+            std::chrono::duration_cast<clock_t::duration>(std::chrono::seconds{tv.tv_sec} + std::chrono::nanoseconds{tv.tv_nsec})};
+    }
+#endif
+
+    utime_t(const struct timeval& v) { set_from_timeval(&v); }
+    utime_t(const struct timeval* v) { set_from_timeval(v); }
+    void to_timespec(struct timespec* ts) const {
+        ts->tv_sec = tv.tv_sec;
+        ts->tv_nsec = tv.tv_nsec;
+    }
+    void set_from_double(double d) {
+        tv.tv_sec = (uint32_t)trunc(d);
+        tv.tv_nsec = (uint32_t)((d - (double)tv.tv_sec) * 1000000000.0);
+    }
+
+    common::real_time to_real_time() const {
+        timespec ts;
+        encode_timeval(&ts);
+        return common::real_clock::from_timespec(ts);
+    }
+
+    // accessors
+    time_t sec() const { return tv.tv_sec; }
+    long usec() const { return tv.tv_nsec / 1000; }
+    int nsec() const { return tv.tv_nsec; }
+
+    // ref accessors/modifiers
+    uint32_t& sec_ref() { return tv.tv_sec; }
+    uint32_t& nsec_ref() { return tv.tv_nsec; }
+
+    uint64_t to_nsec() const { return (uint64_t)tv.tv_nsec + (uint64_t)tv.tv_sec * 1000000000ull; }
+    uint64_t to_msec() const { return (uint64_t)tv.tv_nsec / 1000000ull + (uint64_t)tv.tv_sec * 1000ull; }
+
+    void copy_to_timeval(struct timeval* v) const {
+        v->tv_sec = tv.tv_sec;
+        v->tv_usec = tv.tv_nsec / 1000;
+    }
+    void set_from_timeval(const struct timeval* v) {
+        tv.tv_sec = v->tv_sec;
+        tv.tv_nsec = v->tv_usec * 1000;
+    }
+    void padding_check() { static_assert(sizeof(utime_t) == sizeof(tv.tv_sec) + sizeof(tv.tv_nsec), "utime_t have padding"); }
+
+    void dump(common::Formatter* f) const;
+    static void generate_test_instances(std::list<utime_t*>& o);
+
+    void encode_timeval(struct timespec* t) const {
+        t->tv_sec = tv.tv_sec;
+        t->tv_nsec = tv.tv_nsec;
+    }
+    void decode_timeval(const struct timespec* t) {
+        tv.tv_sec = t->tv_sec;
+        tv.tv_nsec = t->tv_nsec;
+    }
+
+    utime_t round_to_minute() {
+        struct tm bdt;
+        time_t tt = sec();
+        localtime_r(&tt, &bdt);
+        bdt.tm_sec = 0;
+        tt = mktime(&bdt);
+        return utime_t(tt, 0);
+    }
+
+    utime_t round_to_hour() {
+        struct tm bdt;
+        time_t tt = sec();
+        localtime_r(&tt, &bdt);
+        bdt.tm_sec = 0;
+        bdt.tm_min = 0;
+        tt = mktime(&bdt);
+        return utime_t(tt, 0);
+    }
+
+    utime_t round_to_day() {
+        struct tm bdt;
+        time_t tt = sec();
+        localtime_r(&tt, &bdt);
+        bdt.tm_sec = 0;
+        bdt.tm_min = 0;
+        bdt.tm_hour = 0;
+        tt = mktime(&bdt);
+        return utime_t(tt, 0);
+    }
+
+    // cast to double
+    operator double() const { return (double)sec() + ((double)nsec() / 1000000000.0f); }
+    operator timespec() const {
+        timespec ts;
+        ts.tv_sec = sec();
+        ts.tv_nsec = nsec();
+        return ts;
+    }
+
+    void sleep() const {
+        struct timespec ts;
+        to_timespec(&ts);
+        nanosleep(&ts, NULL);
+    }
+
+    // output
+    std::ostream& gmtime(std::ostream& out, bool legacy_form = false) const {
+        out.setf(std::ios::right);
+        char oldfill = out.fill();
+        out.fill('0');
+        if (sec() < ((time_t)(60 * 60 * 24 * 365 * 10))) {
+            // raw seconds.  this looks like a relative time.
+            out << (long)sec() << "." << std::setw(6) << usec();
+        } else {
+            // this looks like an absolute time.
+            //  conform to http://en.wikipedia.org/wiki/ISO_8601
+            struct tm bdt;
+            time_t tt = sec();
+            gmtime_r(&tt, &bdt);
+            out << std::setw(4) << (bdt.tm_year + 1900)  // 2007 -> '07'
+                << '-' << std::setw(2) << (bdt.tm_mon + 1) << '-' << std::setw(2) << bdt.tm_mday;
+            if (legacy_form) {
+                out << ' ';
+            } else {
+                out << 'T';
+            }
+            out << std::setw(2) << bdt.tm_hour << ':' << std::setw(2) << bdt.tm_min << ':' << std::setw(2) << bdt.tm_sec;
+            out << "." << std::setw(6) << usec();
+            out << "Z";
+        }
+        out.fill(oldfill);
+        out.unsetf(std::ios::right);
+        return out;
+    }
+
+    // output
+    std::ostream& gmtime_nsec(std::ostream& out) const {
+        out.setf(std::ios::right);
+        char oldfill = out.fill();
+        out.fill('0');
+        if (sec() < ((time_t)(60 * 60 * 24 * 365 * 10))) {
+            // raw seconds.  this looks like a relative time.
+            out << (long)sec() << "." << std::setw(6) << usec();
+        } else {
+            // this looks like an absolute time.
+            //  conform to http://en.wikipedia.org/wiki/ISO_8601
+            struct tm bdt;
+            time_t tt = sec();
+            gmtime_r(&tt, &bdt);
+            out << std::setw(4) << (bdt.tm_year + 1900)  // 2007 -> '07'
+                << '-' << std::setw(2) << (bdt.tm_mon + 1) << '-' << std::setw(2) << bdt.tm_mday << 'T' << std::setw(2) << bdt.tm_hour << ':'
+                << std::setw(2) << bdt.tm_min << ':' << std::setw(2) << bdt.tm_sec;
+            out << "." << std::setw(9) << nsec();
+            out << "Z";
+        }
+        out.fill(oldfill);
+        out.unsetf(std::ios::right);
+        return out;
+    }
+
+    // output
+    std::ostream& asctime(std::ostream& out) const {
+        out.setf(std::ios::right);
+        char oldfill = out.fill();
+        out.fill('0');
+        if (sec() < ((time_t)(60 * 60 * 24 * 365 * 10))) {
+            // raw seconds.  this looks like a relative time.
+            out << (long)sec() << "." << std::setw(6) << usec();
+        } else {
+            // this looks like an absolute time.
+            struct tm bdt;
+            time_t tt = sec();
+            gmtime_r(&tt, &bdt);
+
+            char buf[128];
+            asctime_r(&bdt, buf);
+            int len = strlen(buf);
+            if (buf[len - 1] == '\n') buf[len - 1] = '\0';
+            out << buf;
+        }
+        out.fill(oldfill);
+        out.unsetf(std::ios::right);
+        return out;
+    }
+
+    std::ostream& localtime(std::ostream& out, bool legacy_form = false) const {
+        out.setf(std::ios::right);
+        char oldfill = out.fill();
+        out.fill('0');
+        if (sec() < ((time_t)(60 * 60 * 24 * 365 * 10))) {
+            // raw seconds.  this looks like a relative time.
+            out << (long)sec() << "." << std::setw(6) << usec();
+        } else {
+            // this looks like an absolute time.
+            //  conform to http://en.wikipedia.org/wiki/ISO_8601
+            struct tm bdt;
+            time_t tt = sec();
+            localtime_r(&tt, &bdt);
+            out << std::setw(4) << (bdt.tm_year + 1900)  // 2007 -> '07'
+                << '-' << std::setw(2) << (bdt.tm_mon + 1) << '-' << std::setw(2) << bdt.tm_mday;
+            if (legacy_form) {
+                out << ' ';
+            } else {
+                out << 'T';
+            }
+            out << std::setw(2) << bdt.tm_hour << ':' << std::setw(2) << bdt.tm_min << ':' << std::setw(2) << bdt.tm_sec;
+            out << "." << std::setw(6) << usec();
+            if (!legacy_form) {
+                char buf[32] = {0};
+                strftime(buf, sizeof(buf), "%z", &bdt);
+                out << buf;
+            }
+        }
+        out.fill(oldfill);
+        out.unsetf(std::ios::right);
+        return out;
+    }
+};
+
+// arithmetic operators
+inline utime_t operator+(const utime_t& l, const utime_t& r) {
+    uint64_t sec = (uint64_t)l.sec() + r.sec();
+    return utime_t(cap_to_u32_max(sec), l.nsec() + r.nsec());
+}
+inline utime_t& operator+=(utime_t& l, const utime_t& r) {
+    l.sec_ref() = cap_to_u32_max((uint64_t)l.sec() + r.sec());
+    l.nsec_ref() += r.nsec();
+    l.normalize();
+    return l;
+}
+inline utime_t& operator+=(utime_t& l, double f) {
+    double fs = trunc(f);
+    double ns = (f - fs) * 1000000000.0;
+    l.sec_ref() = cap_to_u32_max(l.sec() + (uint64_t)fs);
+    l.nsec_ref() += (long)ns;
+    l.normalize();
+    return l;
+}
+
+inline utime_t operator-(const utime_t& l, const utime_t& r) {
+    return utime_t(l.sec() - r.sec() - (l.nsec() < r.nsec() ? 1 : 0), l.nsec() - r.nsec() + (l.nsec() < r.nsec() ? 1000000000 : 0));
+}
+inline utime_t& operator-=(utime_t& l, const utime_t& r) {
+    l.sec_ref() -= r.sec();
+    if (l.nsec() >= r.nsec())
+        l.nsec_ref() -= r.nsec();
+    else {
+        l.nsec_ref() += 1000000000L - r.nsec();
+        l.sec_ref()--;
+    }
+    return l;
+}
+inline utime_t& operator-=(utime_t& l, double f) {
+    double fs = trunc(f);
+    double ns = (f - fs) * 1000000000.0;
+    l.sec_ref() -= (long)fs;
+    long nsl = (long)ns;
+    if (nsl) {
+        l.sec_ref()--;
+        l.nsec_ref() = 1000000000L + l.nsec_ref() - nsl;
+    }
+    l.normalize();
+    return l;
+}
+
+#endif  // COMMON_TIME_H

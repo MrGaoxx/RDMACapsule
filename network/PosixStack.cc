@@ -21,17 +21,21 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include <algorithm>
 
+#include "common/buffer.h"
+
+constexpr uint32_t kPosixIOVMax = 1024;
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
-    ceph::NetHandler &handler;
+    Network::NetHandler &handler;
     int _fd;
     entity_addr_t sa;
     bool connected;
 
    public:
-    explicit PosixConnectedSocketImpl(ceph::NetHandler &h, const entity_addr_t &sa, int f, bool connected)
+    explicit PosixConnectedSocketImpl(Network::NetHandler &h, const entity_addr_t &sa, int f, bool connected)
         : handler(h), _fd(f), sa(sa), connected(connected) {}
 
     int is_connected() override {
@@ -49,26 +53,21 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     }
 
     ssize_t read(char *buf, size_t len) override {
-#ifdef _WIN32
-        ssize_t r = ::recv(_fd, buf, len, 0);
-#else
         ssize_t r = ::read(_fd, buf, len);
-#endif
-        if (r < 0) r = -ceph_sock_errno();
+        if (r < 0) r = -errno;
         return r;
     }
 
-// return the sent length
-// < 0 means error occurred
-#ifndef _WIN32
+    // return the sent length
+    // < 0 means error occurred
+
     static ssize_t do_sendmsg(int fd, struct msghdr &msg, unsigned len, bool more) {
         size_t sent = 0;
         while (1) {
-            MSGR_SIGPIPE_STOPPER;
             ssize_t r;
             r = ::sendmsg(fd, &msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
             if (r < 0) {
-                int err = ceph_sock_errno();
+                int err = errno;
                 if (err == EINTR) {
                     continue;
                 } else if (err == EAGAIN) {
@@ -96,14 +95,14 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
         return (ssize_t)sent;
     }
 
-    ssize_t send(ceph::buffer::list &bl, bool more) override {
+    ssize_t send(BufferList &bl, bool more) override {
         size_t sent_bytes = 0;
-        auto pb = std::cbegin(bl.buffers());
-        uint64_t left_pbrs = bl.get_num_buffers();
+        auto pb = bl.get_begin();
+        uint64_t left_pbrs = bl.GetSize();
         while (left_pbrs) {
             struct msghdr msg;
-            struct iovec msgvec[IOV_MAX];
-            uint64_t size = std::min<uint64_t>(left_pbrs, IOV_MAX);
+            struct iovec msgvec[kPosixIOVMax];
+            uint64_t size = std::min<uint64_t>(left_pbrs, kPosixIOVMax);
             left_pbrs -= size;
             // FIPS zeroization audit 20191115: this memset is not security related.
             memset(&msg, 0, sizeof(msg));
@@ -111,9 +110,9 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
             msg.msg_iov = msgvec;
             unsigned msglen = 0;
             for (auto iov = msgvec; iov != msgvec + size; iov++) {
-                iov->iov_base = (void *)(pb->c_str());
-                iov->iov_len = pb->length();
-                msglen += pb->length();
+                iov->iov_base = (void *)(pb->get_buffer());
+                iov->iov_len = pb->get_len();
+                msglen += iov->iov_len;
                 ++pb;
             }
             ssize_t r = do_sendmsg(_fd, msg, msglen, left_pbrs || more);
@@ -126,70 +125,28 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
         }
 
         if (sent_bytes) {
-            ceph::buffer::list swapped;
-            if (sent_bytes < bl.length()) {
-                bl.splice(sent_bytes, bl.length() - sent_bytes, &swapped);
-                bl.swap(swapped);
+            if (sent_bytes < bl.get_len()) {
+                bl.Move(sent_bytes);
             } else {
-                bl.clear();
+                bl.Clear();
             }
         }
 
         return static_cast<ssize_t>(sent_bytes);
     }
-#else
-    ssize_t send(bufferlist &bl, bool more) override {
-        size_t total_sent_bytes = 0;
-        auto pb = std::cbegin(bl.buffers());
-        uint64_t left_pbrs = bl.get_num_buffers();
-        while (left_pbrs) {
-            WSABUF msgvec[IOV_MAX];
-            uint64_t size = std::min<uint64_t>(left_pbrs, IOV_MAX);
-            left_pbrs -= size;
-            unsigned msglen = 0;
-            for (auto iov = msgvec; iov != msgvec + size; iov++) {
-                iov->buf = const_cast<char *>(pb->c_str());
-                iov->len = pb->length();
-                msglen += pb->length();
-                ++pb;
-            }
-            DWORD sent_bytes = 0;
-            DWORD flags = 0;
-            if (more) flags |= MSG_PARTIAL;
-
-            int ret_val = WSASend(_fd, msgvec, size, &sent_bytes, flags, NULL, NULL);
-            if (ret_val) return -ret_val;
-
-            total_sent_bytes += sent_bytes;
-            if (static_cast<unsigned>(sent_bytes) < msglen) break;
-        }
-
-        if (total_sent_bytes) {
-            bufferlist swapped;
-            if (total_sent_bytes < bl.length()) {
-                bl.splice(total_sent_bytes, bl.length() - total_sent_bytes, &swapped);
-                bl.swap(swapped);
-            } else {
-                bl.clear();
-            }
-        }
-
-        return static_cast<ssize_t>(total_sent_bytes);
-    }
-#endif
     void shutdown() override { ::shutdown(_fd, SHUT_RDWR); }
-    void close() override { compat_closesocket(_fd); }
+    void close() override { ::close(_fd); }
     int fd() const override { return _fd; }
     friend class PosixServerSocketImpl;
     friend class PosixNetworkStack;
 };
 
 class PosixServerSocketImpl : public ServerSocketImpl {
-    ceph::NetHandler &handler;
+    Network::NetHandler &handler;
     int _fd;
 
    public:
-    explicit PosixServerSocketImpl(ceph::NetHandler &h, int f, const entity_addr_t &listen_addr, unsigned slot)
+    explicit PosixServerSocketImpl(Network::NetHandler &h, int f, const entity_addr_t &listen_addr, unsigned slot)
         : ServerSocketImpl(listen_addr.get_type(), slot), handler(h), _fd(f) {}
     int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     void abort_accept() override {
@@ -200,27 +157,27 @@ class PosixServerSocketImpl : public ServerSocketImpl {
 };
 
 int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
-    ceph_assert(sock);
+    kassert(sock);
     sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
-    int sd = accept_cloexec(_fd, (sockaddr *)&ss, &slen);
+    int sd = ::accept(_fd, (sockaddr *)&ss, &slen);
     if (sd < 0) {
-        return -ceph_sock_errno();
+        return -errno;
     }
 
     int r = handler.set_nonblock(sd);
     if (r < 0) {
         ::close(sd);
-        return -ceph_sock_errno();
+        return -errno;
     }
 
     r = handler.set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
     if (r < 0) {
         ::close(sd);
-        return -ceph_sock_errno();
+        return -errno;
     }
 
-    ceph_assert(NULL != out);  // out should not be NULL in accept connection
+    kassert(NULL != out);  // out should not be NULL in accept connection
 
     out->set_type(addr_type);
     out->set_sockaddr((sockaddr *)&ss);
@@ -236,33 +193,33 @@ void PosixWorker::initialize() {}
 int PosixWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptions &opt, ServerSocket *sock) {
     int listen_sd = net.create_socket(sa.get_family(), true);
     if (listen_sd < 0) {
-        return -ceph_sock_errno();
+        return -errno;
     }
 
     int r = net.set_nonblock(listen_sd);
     if (r < 0) {
         ::close(listen_sd);
-        return -ceph_sock_errno();
+        return -errno;
     }
 
     r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
     if (r < 0) {
         ::close(listen_sd);
-        return -ceph_sock_errno();
+        return -errno;
     }
 
     r = ::bind(listen_sd, sa.get_sockaddr(), sa.get_sockaddr_len());
     if (r < 0) {
-        r = -ceph_sock_errno();
-        ldout(cct, 10) << __func__ << " unable to bind to " << sa.get_sockaddr() << ": " << cpp_strerror(r) << dendl;
+        r = -errno;
+        std::cout << __func__ << " unable to bind to " << sa.get_sockaddr() << ": " << cpp_strerror(r) << std::endl;
         ::close(listen_sd);
         return r;
     }
 
-    r = ::listen(listen_sd, cct->_conf->ms_tcp_listen_backlog);
+    r = ::listen(listen_sd, context->m_rdma_config_->m_tcp_listen_backlog_);
     if (r < 0) {
-        r = -ceph_sock_errno();
-        lderr(cct) << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << dendl;
+        r = -errno;
+        std::cout << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << std::endl;
         ::close(listen_sd);
         return r;
     }
@@ -281,7 +238,7 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
     }
 
     if (sd < 0) {
-        return -ceph_sock_errno();
+        return -errno;
     }
 
     net.set_priority(sd, opts.priority, addr.get_family());
@@ -289,4 +246,4 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
     return 0;
 }
 
-PosixNetworkStack::PosixNetworkStack(CephContext *c) : NetworkStack(c) {}
+PosixNetworkStack::PosixNetworkStack(Context *c) : NetworkStack(c) {}

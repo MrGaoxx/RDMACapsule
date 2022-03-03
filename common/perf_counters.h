@@ -16,22 +16,22 @@
 #ifndef COMMON_PERF_COUNTERS_H
 #define COMMON_PERF_COUNTERS_H
 
+#include <time.h>
+
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <string>
 #include <vector>
 
-//#include "common/ceph_mutex.h"
-//#include "common/ceph_time.h"
-//#include "common/perf_histogram.h"
-//#include "include/common_fwd.h"
-//#include "include/utime.h"
+#include "common/common_time.h"
+#include "perf_histogram.h"
 
 namespace common::PerfCounter {
-class Configure;
+class Context;
 class PerfCountersBuilder;
 class PerfCounters;
 }  // namespace common::PerfCounter
@@ -58,31 +58,34 @@ enum class unit_t : uint8_t { UNIT_BYTES, UNIT_NONE };
 namespace common::PerfCounter {
 class PerfCountersBuilder {
    public:
-    PerfCountersBuilder(Configure *config, const std::string &name, int first, int last);
+    PerfCountersBuilder(Context *config, const std::string &name, int first, int last);
     ~PerfCountersBuilder();
 
     // prio values: higher is better, and higher values get included in
-    // 'ceph daemonperf' (and similar) results.
+    // 'common daemonperf' (and similar) results.
     // Use of priorities enables us to add large numbers of counters
     // internally without necessarily overwhelming consumers.
     enum {
         PRIO_CRITICAL = 10,
         // 'interesting' is the default threshold for `daemonperf` output
         PRIO_INTERESTING = 8,
-        // `useful` is the default threshold for transmission to ceph-mgr
+        // `useful` is the default threshold for transmission to common-mgr
         // and inclusion in prometheus/influxdb plugin output
         PRIO_USEFUL = 5,
         PRIO_UNINTERESTING = 2,
         PRIO_DEBUGONLY = 0,
     };
-    void add_u64(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0, int unit = UNIT_NONE);
-    void add_u64_counter(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0, int unit = UNIT_NONE);
-    void add_u64_avg(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0, int unit = UNIT_NONE);
+    void add_u64(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0,
+                 int unit = static_cast<int>(unit_t::UNIT_NONE));
+    void add_u64_counter(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0,
+                         int unit = static_cast<int>(unit_t::UNIT_NONE));
+    void add_u64_avg(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0,
+                     int unit = static_cast<int>(unit_t::UNIT_NONE));
     void add_time(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0);
     void add_time_avg(int key, const char *name, const char *description = NULL, const char *nick = NULL, int prio = 0);
     void add_u64_counter_histogram(int key, const char *name, PerfHistogramCommon::axism_rdma_config_ig_d x_axism_rdma_config_ig,
                                    PerfHistogramCommon::axism_rdma_config_ig_d y_axism_rdma_config_ig, const char *description = NULL,
-                                   const char *nick = NULL, int prio = 0, int unit = UNIT_NONE);
+                                   const char *nick = NULL, int prio = 0, int unit = static_cast<int>(unit_t::UNIT_NONE));
 
     void set_prio_default(int prio_) { prio_default = prio_; }
 
@@ -91,8 +94,8 @@ class PerfCountersBuilder {
    private:
     PerfCountersBuilder(const PerfCountersBuilder &rhs);
     PerfCountersBuilder &operator=(const PerfCountersBuilder &rhs);
-    void add_impl(int idx, const char *name, const char *description, const char *nick, int prio, int ty, int unit = UNIT_NONE,
-                  std::unique_ptr<PerfHistogram<>> histogram = nullptr);
+    void add_impl(int idx, const char *name, const char *description, const char *nick, int prio, int ty,
+                  int unit = static_cast<int>(unit_t::UNIT_NONE), std::unique_ptr<PerfHistogram<>> histogram = nullptr);
 
     PerfCounters *m_perf_counters;
 
@@ -128,7 +131,7 @@ class PerfCounters {
    public:
     /** Represents a PerfCounters data element. */
     struct perf_counter_data_any_d {
-        perf_counter_data_any_d() : name(NULL), description(NULL), nick(NULL), type(PERFCOUNTER_NONE), unit(UNIT_NONE) {}
+        perf_counter_data_any_d() : name(NULL), description(NULL), nick(NULL), type(PERFCOUNTER_NONE), unit(unit_t::UNIT_NONE) {}
         perf_counter_data_any_d(const perf_counter_data_any_d &other)
             : name(other.name), description(other.description), nick(other.nick), type(other.type), unit(other.unit), u64(other.u64.load()) {
             auto a = other.read_avg();
@@ -205,12 +208,6 @@ class PerfCounters {
     void hinc(int idx, int64_t x, int64_t y);
 
     void reset();
-    void dump_formatted(RDMACapsule::Formatter *f, bool schema, const std::string &counter = "") const {
-        dump_formatted_generic(f, schema, false, counter);
-    }
-    void dump_formatted_histograms(RDMACapsule::Formatter *f, bool schema, const std::string &counter = "") const {
-        dump_formatted_generic(f, schema, true, counter);
-    }
     std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
     const std::string &get_name() const;
@@ -222,14 +219,13 @@ class PerfCounters {
     int get_adjusted_priority(int p) const { return std::max(std::min(p + prio_adjust, (int)PerfCountersBuilder::PRIO_CRITICAL), 0); }
 
    private:
-    PerfCounters(Configure *config, const std::string &name, int lower_bound, int upper_bound);
+    PerfCounters(Context *config, const std::string &name, int lower_bound, int upper_bound);
     PerfCounters(const PerfCounters &rhs);
     PerfCounters &operator=(const PerfCounters &rhs);
-    void dump_formatted_generic(common::Formatter *f, bool schema, bool histograms, const std::string &counter = "") const;
 
     typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
-    Configure *mm_rdma_config_ig;
+    Context *m_context;
     int m_lower_bound;
     int m_upper_bound;
     std::string m_name;
@@ -265,14 +261,6 @@ class PerfCountersCollectionImpl {
     void clear();
     bool reset(const std::string &name);
 
-    void dump_formatted(common::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "") const {
-        dump_formatted_generic(f, schema, false, logger, counter);
-    }
-
-    void dump_formatted_histograms(common::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "") const {
-        dump_formatted_generic(f, schema, true, logger, counter);
-    }
-
     // A reference to a perf_counter_data_any_d, with an accompanying
     // pointer to the enclosing PerfCounters, in order that the consumer
     // can see the prio_adjust
@@ -286,23 +274,20 @@ class PerfCountersCollectionImpl {
     void with_counters(std::function<void(const CounterMap &)>) const;
 
    private:
-    void dump_formatted_generic(common::Formatter *f, bool schema, bool histograms, const std::string &logger = "",
-                                const std::string &counter = "") const;
-
     perf_counters_set_t m_loggers;
 
     CounterMap by_path;
 };
 
 class PerfGuard {
-    const ceph::real_clock::time_point start;
+    const common::real_clock::time_point start;
     PerfCounters *const counters;
     const int event;
 
    public:
-    PerfGuard(PerfCounters *const counters, const int event) : start(ceph::real_clock::now()), counters(counters), event(event) {}
+    PerfGuard(PerfCounters *const counters, const int event) : start(common::real_clock::now()), counters(counters), event(event) {}
 
-    ~PerfGuard() { counters->tinc(event, ceph::real_clock::now() - start); }
+    ~PerfGuard() { counters->tinc(event, common::real_clock::now() - start); }
 };
 
 }  // namespace common::PerfCounter

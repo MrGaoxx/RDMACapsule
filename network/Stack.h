@@ -18,10 +18,10 @@
 #define NETWORK_STACK_H
 
 #include "common/buffer.h"
+#include "common/context.h"
 #include "common/perf_counters.h"
 #include "common/types.h"
 #include "network/Event.h"
-
 class Worker;
 class ConnectedSocketImpl {
    public:

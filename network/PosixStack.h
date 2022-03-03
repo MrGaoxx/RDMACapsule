@@ -41,7 +41,7 @@ class PosixNetworkStack : public NetworkStack {
 
     void spawn_worker(std::function<void()> &&func) override { threads.emplace_back(std::move(func)); }
     void join_worker(unsigned i) override {
-        ceph_assert(threads.size() > i && threads[i].joinable());
+        kassert(threads.size() > i && threads[i].joinable());
         threads[i].join();
     }
 };

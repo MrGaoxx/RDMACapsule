@@ -22,9 +22,6 @@ class PerfCountersCollection {
     void clear();
     bool reset(const std::string &name);
 
-    void dump_formatted(common::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "");
-    void dump_formatted_histograms(common::Formatter *f, bool schema, const std::string &logger = "", const std::string &counter = "");
-
     void with_counters(std::function<void(const PerfCountersCollectionImpl::CounterMap &)>) const;
 
     friend class PerfCountersCollectionTest;
