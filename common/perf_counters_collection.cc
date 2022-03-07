@@ -1,8 +1,7 @@
 #include "perf_counters_collection.h"
 
 #include "common.h"
-
-namespace common::Perfcounter {
+namespace common::PerfCounter {
 /* PerfcounterCollection hold the lock for PerfCounterCollectionImp */
 PerfCountersCollection::PerfCountersCollection(Context *context) : m_context(context), m_lock() {}
 PerfCountersCollection::~PerfCountersCollection() { clear(); }
@@ -31,4 +30,4 @@ void PerfCountersDeleter::operator()(PerfCounters *p) noexcept {
     delete p;
 }
 
-}  // namespace common::Perfcounter
+}  // namespace common::PerfCounter

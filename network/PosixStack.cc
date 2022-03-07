@@ -29,19 +29,17 @@
 
 constexpr uint32_t kPosixIOVMax = 1024;
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
-    Network::NetHandler &handler;
     int _fd;
     entity_addr_t sa;
     bool connected;
 
    public:
-    explicit PosixConnectedSocketImpl(Network::NetHandler &h, const entity_addr_t &sa, int f, bool connected)
-        : handler(h), _fd(f), sa(sa), connected(connected) {}
+    explicit PosixConnectedSocketImpl(const entity_addr_t &sa, int f, bool connected) : _fd(f), sa(sa), connected(connected) {}
 
     int is_connected() override {
         if (connected) return 1;
 
-        int r = handler.reconnect(sa, _fd);
+        int r = Network::NetHandler::reconnect(sa, _fd);
         if (r == 0) {
             connected = true;
             return 1;
@@ -142,12 +140,10 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 };
 
 class PosixServerSocketImpl : public ServerSocketImpl {
-    Network::NetHandler &handler;
     int _fd;
 
    public:
-    explicit PosixServerSocketImpl(Network::NetHandler &h, int f, const entity_addr_t &listen_addr, unsigned slot)
-        : ServerSocketImpl(listen_addr.get_type(), slot), handler(h), _fd(f) {}
+    explicit PosixServerSocketImpl(int f, const entity_addr_t &listen_addr, unsigned slot) : ServerSocketImpl(listen_addr.get_type(), slot), _fd(f) {}
     int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     void abort_accept() override {
         ::close(_fd);
@@ -165,13 +161,13 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
         return -errno;
     }
 
-    int r = handler.set_nonblock(sd);
+    int r = Network::NetHandler::set_nonblock(sd);
     if (r < 0) {
         ::close(sd);
         return -errno;
     }
 
-    r = handler.set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
+    r = Network::NetHandler::set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
     if (r < 0) {
         ::close(sd);
         return -errno;
@@ -181,9 +177,9 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
 
     out->set_type(addr_type);
     out->set_sockaddr((sockaddr *)&ss);
-    handler.set_priority(sd, opt.priority, out->get_family());
+    Network::NetHandler::set_priority(sd, opt.priority, out->get_family());
 
-    std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(handler, *out, sd, true));
+    std::unique_ptr<PosixConnectedSocketImpl> csi(new PosixConnectedSocketImpl(*out, sd, true));
     *sock = ConnectedSocket(std::move(csi));
     return 0;
 }
@@ -191,18 +187,18 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
 void PosixWorker::initialize() {}
 
 int PosixWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptions &opt, ServerSocket *sock) {
-    int listen_sd = net.create_socket(sa.get_family(), true);
+    int listen_sd = Network::NetHandler::create_socket(sa.get_family(), true);
     if (listen_sd < 0) {
         return -errno;
     }
 
-    int r = net.set_nonblock(listen_sd);
+    int r = Network::NetHandler::set_nonblock(listen_sd);
     if (r < 0) {
         ::close(listen_sd);
         return -errno;
     }
 
-    r = net.set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
+    r = Network::NetHandler::set_socket_options(listen_sd, opt.nodelay, opt.rcbuf_size);
     if (r < 0) {
         ::close(listen_sd);
         return -errno;
@@ -224,7 +220,7 @@ int PosixWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptio
         return r;
     }
 
-    *sock = ServerSocket(std::unique_ptr<PosixServerSocketImpl>(new PosixServerSocketImpl(net, listen_sd, sa, addr_slot)));
+    *sock = ServerSocket(std::unique_ptr<PosixServerSocketImpl>(new PosixServerSocketImpl(listen_sd, sa, addr_slot)));
     return 0;
 }
 
@@ -232,17 +228,17 @@ int PosixWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, C
     int sd;
 
     if (opts.nonblock) {
-        sd = net.nonblock_connect(addr, opts.connect_bind_addr);
+        sd = Network::NetHandler::nonblock_connect(context, addr, opts.connect_bind_addr);
     } else {
-        sd = net.connect(addr, opts.connect_bind_addr);
+        sd = Network::NetHandler::connect(context, addr, opts.connect_bind_addr);
     }
 
     if (sd < 0) {
         return -errno;
     }
 
-    net.set_priority(sd, opts.priority, addr.get_family());
-    *socket = ConnectedSocket(std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(net, addr, sd, !opts.nonblock)));
+    Network::NetHandler::set_priority(sd, opts.priority, addr.get_family());
+    *socket = ConnectedSocket(std::unique_ptr<PosixConnectedSocketImpl>(new PosixConnectedSocketImpl(addr, sd, !opts.nonblock)));
     return 0;
 }
 

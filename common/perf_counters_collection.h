@@ -6,6 +6,7 @@
 #include "common/formatter.h"
 #include "perf_counters.h"
 
+class Context;
 namespace common::PerfCounter {
 class PerfCountersCollection {
     Context *m_context;

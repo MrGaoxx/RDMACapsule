@@ -31,7 +31,6 @@
 #include "perf_histogram.h"
 
 namespace common::PerfCounter {
-class Context;
 class PerfCountersBuilder;
 class PerfCounters;
 }  // namespace common::PerfCounter

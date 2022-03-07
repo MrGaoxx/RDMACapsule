@@ -20,12 +20,6 @@
 #include "common/common.h"
 #include "common/common_time.h"
 #include "core/RDMAStack.h"
-#ifdef HAVE_DPDK
-#include "dpdk/DPDKStack.h"
-#endif
-
-#undef dout_prefix
-#define dout_prefix *_dout << "stack "
 
 std::function<void()> NetworkStack::add_thread(Worker* w) {
     return [this, w]() {
@@ -54,27 +48,22 @@ std::function<void()> NetworkStack::add_thread(Worker* w) {
 std::shared_ptr<NetworkStack> NetworkStack::create(Context* c, const std::string& t) {
     std::shared_ptr<NetworkStack> stack = nullptr;
 
-    if (t == "posix") stack.reset(new PosixNetworkStack(c));
-#ifdef HAVE_RDMA
+    if (t == "posix")
+        stack.reset(new PosixNetworkStack(c));
     else if (t == "rdma")
         stack.reset(new RDMAStack(c));
-#endif
-#ifdef HAVE_DPDK
-    else if (t == "dpdk")
-        stack.reset(new DPDKStack(c));
-#endif
 
     if (stack == nullptr) {
         std::cout << __func__ << " ms_async_transport_type " << t << " is not supported! " << std::endl;
-        ceph_abort();
+        abort();
         return nullptr;
     }
 
-    unsigned num_workers = c->m_rdma_config_->ms_async_op_threads;
-    ceph_assert(num_workers > 0);
+    unsigned num_workers = c->m_rdma_config_->m_op_threads_num_;
+    kassert(num_workers > 0);
     if (num_workers >= EventCenter::MAX_EVENTCENTER) {
-        ldout(c, 0) << __func__ << " max thread limit is " << EventCenter::MAX_EVENTCENTER << ", switching to this now. "
-                    << "Higher thread values are unnecessary and currently unsupported." << std::endl;
+        std::cout << __func__ << " max thread limit is " << EventCenter::MAX_EVENTCENTER << ", switching to this now. "
+                  << "Higher thread values are unnecessary and currently unsupported." << std::endl;
         num_workers = EventCenter::MAX_EVENTCENTER;
     }
     const int InitEventNumber = 5000;
@@ -88,7 +77,7 @@ std::shared_ptr<NetworkStack> NetworkStack::create(Context* c, const std::string
     return stack;
 }
 
-NetworkStack::NetworkStack(Context* c) : config(c) {}
+NetworkStack::NetworkStack(Context* c) : context(c) {}
 
 void NetworkStack::start() {
     std::unique_lock<decltype(pool_spin)> lk(pool_spin);
@@ -129,7 +118,7 @@ Worker* NetworkStack::get_worker() {
     }
 
     pool_spin.unlock();
-    ceph_assert(current_best);
+    kassert(current_best);
     ++current_best->references;
     return current_best;
 }
@@ -146,8 +135,8 @@ void NetworkStack::stop() {
 }
 
 class C_drain : public EventCallback {
-    ceph::mutex drain_lock = ceph::make_mutex("C_drain::drain_lock");
-    ceph::condition_variable drain_cond;
+    std::mutex drain_lock;
+    std::condition_variable drain_cond;
     unsigned drain_count;
 
    public:
@@ -169,7 +158,7 @@ void NetworkStack::drain() {
     pool_spin.lock();
     C_drain drain(get_num_worker());
     for (Worker* worker : workers) {
-        ceph_assert(cur != worker->center.get_owner());
+        kassert(cur != worker->center.get_owner());
         worker->center.dispatch_event_external(EventCallbackRef(&drain));
     }
     pool_spin.unlock();

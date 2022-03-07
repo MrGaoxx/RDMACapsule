@@ -17,19 +17,22 @@
 #ifndef NEYWORK_NET_HANDLER_H
 #define NETWORK_NET_HANDLER_H
 #include "common/common.h"
-
+#include "common/context.h"
 namespace Network {
 class NetHandler {
-    int generic_connect(const entity_addr_t &addr, const entity_addr_t &bind_addr, bool nonblock);
-
-    Context *context;
-
    public:
-    int create_socket(int domain, bool reuse_addr = false);
-    explicit NetHandler(Context *c) : context(c) {}
-    int set_nonblock(int sd);
-    int set_socket_options(int sd, bool nodelay, int size);
-    int connect(const entity_addr_t &addr, const entity_addr_t &bind_addr);
+    explicit NetHandler() = delete;
+
+    static int create_socket(int domain, bool reuse_addr = false);
+
+    static int generic_connect(Context *cct, const entity_addr_t &addr, const entity_addr_t &bind_addr, bool nonblock);
+    static int connect(Context *cct, const entity_addr_t &addr, const entity_addr_t &bind_addr);
+    static int reconnect(const entity_addr_t &addr, int sd);
+    static int nonblock_connect(Context *cct, const entity_addr_t &addr, const entity_addr_t &bind_addr);
+
+    static int set_nonblock(int sd);
+    static int set_socket_options(int sd, bool nodelay, int size);
+    static void set_priority(int sd, int priority, int domain);
 
     /**
      * Try to reconnect the socket.
@@ -38,9 +41,6 @@ class NetHandler {
      *            > 0       just break, and wait for event
      *            < 0       need to goto fail
      */
-    int reconnect(const entity_addr_t &addr, int sd);
-    int nonblock_connect(const entity_addr_t &addr, const entity_addr_t &bind_addr);
-    void set_priority(int sd, int priority, int domain);
 };
 }  // namespace Network
 

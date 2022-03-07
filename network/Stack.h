@@ -22,6 +22,7 @@
 #include "common/perf_counters.h"
 #include "common/types.h"
 #include "network/Event.h"
+
 class Worker;
 class ConnectedSocketImpl {
    public:
@@ -208,8 +209,8 @@ class Worker {
 
         plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
         plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-        plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, static_cast<unit_t>(UNIT_BYTES));
-        plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, static_cast<unit_t>(UNIT_BYTES));
+        plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
+        plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
         plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
         plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
 
@@ -239,7 +240,7 @@ class Worker {
     PerfCounters *get_perf_counter() { return perf_logger; }
     void release_worker() {
         int oldref = references.fetch_sub(1);
-        ceph_assert(oldref > 0);
+        kassert(oldref > 0);
     }
     void init_done() {
         init_lock.lock();
@@ -265,7 +266,7 @@ class Worker {
 };
 
 class NetworkStack {
-    ceph::spinlock pool_spin;
+    common::spinlock pool_spin;
     bool started = false;
 
     std::function<void()> add_thread(Worker *w);
@@ -274,8 +275,8 @@ class NetworkStack {
     virtual void rename_thread(unsigned id) {
         static constexpr int TASK_COMM_LEN = 16;
         char tp_name[TASK_COMM_LEN];
-        sprintf(tp_name, "msgr-worker-%u", id);
-        ceph_pthread_setname(pthread_self(), tp_name);
+        sprintf(tp_name, "worker-%u", id);
+        pthread_setname(pthread_self(), tp_name);
     }
 
    protected:

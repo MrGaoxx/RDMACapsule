@@ -450,7 +450,7 @@ class Infiniband {
        public:
         typedef MemoryManager::Chunk Chunk;
         QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type type, int ib_physical_port, ibv_srq *srq, Infiniband::CompletionQueue *txcq,
-                  Infiniband::CompletionQueue *rxcq, uint32_t tx_queue_len, uint32_t max_recv_wr, struct rdma_cm_id *cid, uint32_t q_key = 0);
+                  Infiniband::CompletionQueue *rxcq, uint32_t tx_queue_len, uint32_t max_recv_wr, rdma_cm_id *cid, uint32_t q_key = 0);
         ~QueuePair();
 
         int modify_qp_to_error();

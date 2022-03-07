@@ -9,7 +9,7 @@
 #include <string.h>
 
 std::ostream &operator<<(std::ostream &out, const entity_addr_t &addr) {
-    if (addr.type != entity_addr_t::TYPE_ANY) {
+    if (addr.type != entity_addr_t::type_t::TYPE_ANY) {
         out << entity_addr_t::get_type_name(addr.type) << ":";
     }
     out << addr.get_sockaddr() << '/' << addr.nonce;

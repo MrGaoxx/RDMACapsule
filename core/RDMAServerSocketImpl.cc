@@ -15,12 +15,7 @@
  */
 
 #include "RDMAStack.h"
-#include "include/compat.h"
-#include "include/sock_compat.h"
-#include "msg/async/net_handler.h"
-
-#undef dout_prefix
-#define dout_prefix *_dout << " RDMAServerSocketImpl "
+#include "network/net_handler.h"
 
 RDMAServerSocketImpl::RDMAServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher,
                                            RDMAWorker *w, entity_addr_t &a, unsigned slot)
@@ -60,7 +55,7 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt) {
         goto err;
     }
 
-    rc = ::listen(server_setup_socket, context->m_rdma_config_->ms_tcp_listen_backlog);
+    rc = ::listen(server_setup_socket, context->m_rdma_config_->m_tcp_listen_backlog_);
     if (rc < 0) {
         rc = -errno;
         std::cout << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(errno) << std::endl;
@@ -83,7 +78,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 
     sockaddr_storage ss;
     socklen_t slen = sizeof(ss);
-    int sd = accept_cloexec(server_setup_socket, (sockaddr *)&ss, &slen);
+    int sd = ::accept(server_setup_socket, (sockaddr *)&ss, &slen);
     if (sd < 0) {
         return -errno;
     }

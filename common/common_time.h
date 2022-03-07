@@ -717,4 +717,205 @@ inline utime_t& operator-=(utime_t& l, double f) {
     return l;
 }
 
+class Cycles {
+   public:
+    static void init();
+
+    /**
+     * Return the current value of the fine-grain CPU cycle counter
+     * (accessed via the RDTSC instruction).
+     */
+    static __inline __attribute__((always_inline)) uint64_t rdtsc() {
+        uint32_t lo, hi;
+        __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+        return (((uint64_t)hi << 32) | lo);
+    }
+    static double per_second();
+    static double to_seconds(uint64_t cycles, double cycles_per_sec = 0);
+    static uint64_t from_seconds(double seconds, double cycles_per_sec = 0);
+    static uint64_t to_microseconds(uint64_t cycles, double cycles_per_sec = 0);
+    static uint64_t to_nanoseconds(uint64_t cycles, double cycles_per_sec = 0);
+    static uint64_t from_nanoseconds(uint64_t ns, double cycles_per_sec = 0);
+    static void sleep(uint64_t us);
+
+   private:
+    Cycles();
+
+    /// Conversion factor between cycles and the seconds; computed by
+    /// Cycles::init.
+    static double cycles_per_sec;
+
+    /**
+     * Returns the conversion factor between cycles in seconds, using
+     * a mock value for testing when appropriate.
+     */
+    static __inline __attribute__((always_inline)) double get_cycles_per_sec() { return cycles_per_sec; }
+};
+
+double Cycles::cycles_per_sec = 0;
+
+/**
+ * Perform once-only overall initialization for the Cycles class, such
+ * as calibrating the clock frequency.  This method must be called
+ * before using the Cycles module.
+ *
+ * It is not initialized by default because the timing loops cause
+ * general process startup times to balloon
+ * (http://tracker.ceph.com/issues/15225).
+ */
+inline void Cycles::init() {
+    if (cycles_per_sec != 0) return;
+
+    // Skip initialization if rtdsc is not implemented
+    if (rdtsc() == 0) return;
+
+    // Compute the frequency of the fine-grained CPU timer: to do this,
+    // take parallel time readings using both rdtsc and gettimeofday.
+    // After 10ms have elapsed, take the ratio between these readings.
+
+    struct timeval start_time, stop_time;
+    uint64_t micros;
+    double old_cycles;
+
+    // There is one tricky aspect, which is that we could get interrupted
+    // between calling gettimeofday and reading the cycle counter, in which
+    // case we won't have corresponding readings.  To handle this (unlikely)
+    // case, compute the overall result repeatedly, and wait until we get
+    // two successive calculations that are within 0.1% of each other.
+    old_cycles = 0;
+    while (1) {
+        if (gettimeofday(&start_time, NULL) != 0) {
+            abort();
+        }
+        uint64_t start_cycles = rdtsc();
+        while (1) {
+            if (gettimeofday(&stop_time, NULL) != 0) {
+                abort();
+            }
+            uint64_t stop_cycles = rdtsc();
+            micros = (stop_time.tv_usec - start_time.tv_usec) + (stop_time.tv_sec - start_time.tv_sec) * 1000000;
+            if (micros > 10000) {
+                cycles_per_sec = static_cast<double>(stop_cycles - start_cycles);
+                cycles_per_sec = 1000000.0 * cycles_per_sec / static_cast<double>(micros);
+                break;
+            }
+        }
+        double delta = cycles_per_sec / 1000.0;
+        if ((old_cycles > (cycles_per_sec - delta)) && (old_cycles < (cycles_per_sec + delta))) {
+            return;
+        }
+        old_cycles = cycles_per_sec;
+    }
+}
+
+/**
+ * Return the number of CPU cycles per second.
+ */
+inline double Cycles::per_second() { return get_cycles_per_sec(); }
+
+/**
+ * Given an elapsed time measured in cycles, return a floating-point number
+ * giving the corresponding time in seconds.
+ * \param cycles
+ *      Difference between the results of two calls to rdtsc.
+ * \param cycles_per_sec
+ *      Optional parameter to specify the frequency of the counter that #cycles
+ *      was taken from. Useful when converting a remote machine's tick counter
+ *      to seconds. The default value of 0 will use the local processor's
+ *      computed counter frequency.
+ * \return
+ *      The time in seconds corresponding to cycles.
+ */
+double Cycles::to_seconds(uint64_t cycles, double cycles_per_sec) {
+    if (cycles_per_sec == 0) cycles_per_sec = get_cycles_per_sec();
+    return static_cast<double>(cycles) / cycles_per_sec;
+}
+
+/**
+ * Given a time in seconds, return the number of cycles that it
+ * corresponds to.
+ * \param seconds
+ *      Time in seconds.
+ * \param cycles_per_sec
+ *      Optional parameter to specify the frequency of the counter that #cycles
+ *      was taken from. Useful when converting a remote machine's tick counter
+ *      to seconds. The default value of 0 will use the local processor's
+ *      computed counter frequency.
+ * \return
+ *      The approximate number of cycles corresponding to #seconds.
+ */
+inline uint64_t Cycles::from_seconds(double seconds, double cycles_per_sec) {
+    if (cycles_per_sec == 0) cycles_per_sec = get_cycles_per_sec();
+    return (uint64_t)(seconds * cycles_per_sec + 0.5);
+}
+
+/**
+ * Given an elapsed time measured in cycles, return an integer
+ * giving the corresponding time in microseconds. Note: to_seconds()
+ * is faster than this method.
+ * \param cycles
+ *      Difference between the results of two calls to rdtsc.
+ * \param cycles_per_sec
+ *      Optional parameter to specify the frequency of the counter that #cycles
+ *      was taken from. Useful when converting a remote machine's tick counter
+ *      to seconds. The default value of 0 will use the local processor's
+ *      computed counter frequency.
+ * \return
+ *      The time in microseconds corresponding to cycles (rounded).
+ */
+inline uint64_t Cycles::to_microseconds(uint64_t cycles, double cycles_per_sec) { return to_nanoseconds(cycles, cycles_per_sec) / 1000; }
+
+/**
+ * Given an elapsed time measured in cycles, return an integer
+ * giving the corresponding time in nanoseconds. Note: to_seconds()
+ * is faster than this method.
+ * \param cycles
+ *      Difference between the results of two calls to rdtsc.
+ * \param cycles_per_sec
+ *      Optional parameter to specify the frequency of the counter that #cycles
+ *      was taken from. Useful when converting a remote machine's tick counter
+ *      to seconds. The default value of 0 will use the local processor's
+ *      computed counter frequency.
+ * \return
+ *      The time in nanoseconds corresponding to cycles (rounded).
+ */
+inline uint64_t Cycles::to_nanoseconds(uint64_t cycles, double cycles_per_sec) {
+    if (cycles_per_sec == 0) cycles_per_sec = get_cycles_per_sec();
+    return (uint64_t)(1e09 * static_cast<double>(cycles) / cycles_per_sec + 0.5);
+}
+
+/**
+ * Given a number of nanoseconds, return an approximate number of
+ * cycles for an equivalent time length.
+ * \param ns
+ *      Number of nanoseconds.
+ * \param cycles_per_sec
+ *      Optional parameter to specify the frequency of the counter that #cycles
+ *      was taken from. Useful when converting a remote machine's tick counter
+ *      to seconds. The default value of 0 will use the local processor's
+ *      computed counter frequency.
+ * \return
+ *      The approximate number of cycles for the same time length.
+ */
+inline uint64_t Cycles::from_nanoseconds(uint64_t ns, double cycles_per_sec) {
+    if (cycles_per_sec == 0) cycles_per_sec = get_cycles_per_sec();
+    return (uint64_t)(static_cast<double>(ns) * cycles_per_sec / 1e09 + 0.5);
+}
+
+/**
+ * Busy wait for a given number of microseconds.
+ * Callers should use this method in most reasonable cases as opposed to
+ * usleep for accurate measurements. Calling usleep may put the the processor
+ * in a low power mode/sleep state which reduces the clock frequency.
+ * So, each time the process/thread wakes up from usleep, it takes some time
+ * to ramp up to maximum frequency. Thus meausrements often incur higher
+ * latencies.
+ * \param us
+ *      Number of microseconds.
+ */
+inline void Cycles::sleep(uint64_t us) {
+    uint64_t stop = Cycles::rdtsc() + Cycles::from_nanoseconds(1000 * us);
+    while (Cycles::rdtsc() < stop)
+        ;
+}
 #endif  // COMMON_TIME_H

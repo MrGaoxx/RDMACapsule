@@ -13,6 +13,8 @@
  * Foundation.  See file COPYING.
  *
  */
+#ifndef RDMA_STACK_H
+#define RDMA_STACK_H
 
 #include <sys/eventfd.h>
 
@@ -118,7 +120,7 @@ class RDMAWorker : public Worker {
     EventCallbackRef tx_handler;
     std::list<RDMAConnectedSocketImpl *> pending_sent_conns;
     std::shared_ptr<RDMADispatcher> dispatcher;
-    ceph::mutex lock = ceph::make_mutex("RDMAWorker::lock");
+    std::mutex lock;
 
     class C_handle_cq_tx : public EventCallback {
         RDMAWorker *worker;
@@ -171,9 +173,9 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     RDMAWorker *worker;
     std::vector<Chunk *> buffers;
     int notify_fd = -1;
-    ceph::buffer::list pending_bl;
+    BufferList pending_bl;
 
-    ceph::mutex lock = ceph::make_mutex("RDMAConnectedSocketImpl::lock");
+    std::mutex lock;
     std::vector<ibv_wc> wc;
     bool is_server;
     EventCallbackRef read_handler;
@@ -187,8 +189,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     void buffer_prefetch(void);
     ssize_t read_buffers(char *buf, size_t len);
     int post_work_request(std::vector<Chunk *> &);
-    size_t tx_copy_chunk(std::vector<Chunk *> &tx_buffers, size_t req_copy_len, decltype(std::cbegin(pending_bl.buffers())) &start,
-                         const decltype(std::cbegin(pending_bl.buffers())) &end);
+    size_t tx_copy_chunk(std::vector<Chunk *> &tx_buffers, size_t req_copy_len, decltype(pending_bl.get_begin()) &start,
+                         const decltype(pending_bl.get_end()) &end);
 
    public:
     RDMAConnectedSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w);
@@ -199,7 +201,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     virtual int is_connected() override { return connected; }
 
     virtual ssize_t read(char *buf, size_t len) override;
-    virtual ssize_t send(ceph::buffer::list &bl, bool more) override;
+    virtual ssize_t send(BufferList &bl, bool more) override;
     virtual void shutdown() override;
     virtual void close() override;
     virtual int fd() const override { return notify_fd; }
@@ -234,41 +236,9 @@ enum RDMA_CM_STATUS {
     ERROR
 };
 
-class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
-   public:
-    RDMAIWARPConnectedSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
-                                 RDMACMInfo *info = nullptr);
-    ~RDMAIWARPConnectedSocketImpl();
-    virtual int try_connect(const entity_addr_t &, const SocketOptions &opt) override;
-    virtual void close() override;
-    virtual void shutdown() override;
-    virtual void handle_cm_connection();
-    void activate();
-    int alloc_resource();
-    void close_notify();
-
-   private:
-    rdma_cm_id *cm_id = nullptr;
-    rdma_event_channel *cm_channel = nullptr;
-    EventCallbackRef cm_con_handler;
-    std::mutex close_mtx;
-    std::condition_variable close_condition;
-    bool closed = false;
-    RDMA_CM_STATUS status = IDLE;
-
-    class C_handle_cm_connection : public EventCallback {
-        RDMAIWARPConnectedSocketImpl *csi;
-
-       public:
-        C_handle_cm_connection(RDMAIWARPConnectedSocketImpl *w) : csi(w) {}
-        void do_request(uint64_t fd) { csi->handle_cm_connection(); }
-    };
-};
-
 class RDMAServerSocketImpl : public ServerSocketImpl {
    protected:
     Context *context;
-    ceph::NetHandler net;
     int server_setup_socket;
     std::shared_ptr<Infiniband> ib;
     std::shared_ptr<RDMADispatcher> dispatcher;
@@ -285,19 +255,6 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
     virtual int fd() const override { return server_setup_socket; }
 };
 
-class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
-   public:
-    RDMAIWARPServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
-                              entity_addr_t &addr, unsigned addr_slot);
-    virtual int listen(entity_addr_t &sa, const SocketOptions &opt) override;
-    virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
-    virtual void abort_accept() override;
-
-   private:
-    rdma_cm_id *cm_id = nullptr;
-    rdma_event_channel *cm_channel = nullptr;
-};
-
 class RDMAStack : public NetworkStack {
     std::vector<std::thread> threads;
     PerfCounters *perf_counter;
@@ -310,6 +267,7 @@ class RDMAStack : public NetworkStack {
 
    public:
     explicit RDMAStack(Context *context);
+
     virtual ~RDMAStack();
     virtual bool nonblock_connect_need_writable_event() const override { return false; }
 

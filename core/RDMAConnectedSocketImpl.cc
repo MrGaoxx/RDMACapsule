@@ -55,7 +55,7 @@ RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(Context *context, std::shared_p
       established_handler(new C_handle_connection_established(this)),
       active(false),
       pending(false) {
-    if (!context->m_rdma_config_->m_use_rdma_cm) {
+    if (!context->m_rdma_config_->m_use_rdma_cm_) {
         qp = ib->create_queue_pair(context, dispatcher->get_tx_cq(), dispatcher->get_rx_cq(), IBV_QPT_RC, NULL);
         if (!qp) {
             std::cout << __func__ << " queue pair create failed" << std::endl;
@@ -122,21 +122,20 @@ int RDMAConnectedSocketImpl::activate() {
 
 int RDMAConnectedSocketImpl::try_connect(const entity_addr_t &peer_addr, const SocketOptions &opts) {
     std::cout << __func__ << " nonblock:" << opts.nonblock << ", nodelay:" << opts.nodelay << ", rbuf_size: " << opts.rcbuf_size << std::endl;
-    ceph::NetHandler net(context);
 
     // we construct a socket to transport ib sync message
     // but we shouldn't block in tcp connecting
     if (opts.nonblock) {
-        tcp_fd = net.nonblock_connect(peer_addr, opts.connect_bind_addr);
+        tcp_fd = Network::NetHandler::nonblock_connect(context, peer_addr, opts.connect_bind_addr);
     } else {
-        tcp_fd = net.connect(peer_addr, opts.connect_bind_addr);
+        tcp_fd = Network::NetHandler::connect(context, peer_addr, opts.connect_bind_addr);
     }
 
     if (tcp_fd < 0) {
         return -errno;
     }
 
-    int r = net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
+    int r = Network::NetHandler::set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
     if (r < 0) {
         ::close(tcp_fd);
         tcp_fd = -1;
@@ -144,7 +143,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t &peer_addr, const S
     }
 
     std::cout << __func__ << " tcp_fd: " << tcp_fd << std::endl;
-    net.set_priority(tcp_fd, opts.priority, peer_addr.get_family());
+    Network::NetHandler::set_priority(tcp_fd, opts.priority, peer_addr.get_family());
     r = 0;
     if (opts.nonblock) {
         worker->center.create_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE, established_handler);
@@ -324,16 +323,16 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
     return read_size;
 }
 
-ssize_t RDMAConnectedSocketImpl::send(ceph::buffer::list &bl, bool more) {
+ssize_t RDMAConnectedSocketImpl::send(BufferList &bl, bool more) {
     if (error) {
         if (!active) return -EPIPE;
         return -error;
     }
-    size_t bytes = bl.length();
+    size_t bytes = bl.get_len();
     if (!bytes) return 0;
     {
         std::lock_guard l{lock};
-        pending_bl.claim_append(bl);
+        pending_bl.Append(bl);
         if (!connected) {
             std::cout << __func__ << " fake send to upper, QP: " << local_qpn << std::endl;
             return bytes;
@@ -345,9 +344,8 @@ ssize_t RDMAConnectedSocketImpl::send(ceph::buffer::list &bl, bool more) {
     return bytes;
 }
 
-size_t RDMAConnectedSocketImpl::tx_copy_chunk(std::vector<Chunk *> &tx_buffers, size_t req_copy_len,
-                                              decltype(std::cbegin(pending_bl.buffers())) &start,
-                                              const decltype(std::cbegin(pending_bl.buffers())) &end) {
+size_t RDMAConnectedSocketImpl::tx_copy_chunk(std::vector<Chunk *> &tx_buffers, size_t req_copy_len, decltype(pending_bl.get_begin()) &start,
+                                              const decltype(pending_bl.get_end()) &end) {
     kassert(start != end);
     auto chunk_idx = tx_buffers.size();
     if (0 == worker->get_reged_mem(this, tx_buffers, req_copy_len)) {
@@ -359,11 +357,11 @@ size_t RDMAConnectedSocketImpl::tx_copy_chunk(std::vector<Chunk *> &tx_buffers, 
     Chunk *current_chunk = tx_buffers[chunk_idx];
     size_t write_len = 0;
     while (start != end) {
-        const uintptr_t addr = reinterpret_cast<uintptr_t>(start->c_str());
+        const uintptr_t addr = reinterpret_cast<uintptr_t>(start->get_buffer());
 
         size_t slice_write_len = 0;
-        while (slice_write_len < start->length()) {
-            size_t real_len = current_chunk->write((char *)addr + slice_write_len, start->length() - slice_write_len);
+        while (slice_write_len < start->get_len()) {
+            size_t real_len = current_chunk->write((char *)addr + slice_write_len, start->get_len() - slice_write_len);
 
             slice_write_len += real_len;
             write_len += real_len;
@@ -384,16 +382,16 @@ size_t RDMAConnectedSocketImpl::tx_copy_chunk(std::vector<Chunk *> &tx_buffers, 
 ssize_t RDMAConnectedSocketImpl::submit(bool more) {
     if (error) return -error;
     std::lock_guard l{lock};
-    size_t bytes = pending_bl.length();
-    std::cout << __func__ << " we need " << bytes << " bytes. iov size: " << pending_bl.get_num_buffers() << std::endl;
+    size_t bytes = pending_bl.get_len();
+    std::cout << __func__ << " we need " << bytes << " bytes. iov size: " << pending_bl.GetSize() << std::endl;
     if (!bytes) return 0;
 
     std::vector<Chunk *> tx_buffers;
-    auto it = std::cbegin(pending_bl.buffers());
+    auto it = pending_bl.get_begin();
     auto copy_start = it;
     size_t total_copied = 0, wait_copy_len = 0;
-    while (it != pending_bl.buffers().end()) {
-        if (ib->is_tx_buffer(it->raw_c_str())) {
+    while (it != pending_bl.get_end()) {
+        if (ib->is_tx_buffer(static_cast<const char *>(it->get_buffer()))) {
             if (wait_copy_len) {
                 size_t copied = tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
                 total_copied += copied;
@@ -401,11 +399,11 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
                 wait_copy_len = 0;
             }
             kassert(copy_start == it);
-            tx_buffers.push_back(ib->get_tx_chunk_by_buffer(it->raw_c_str()));
-            total_copied += it->length();
+            tx_buffers.push_back(ib->get_tx_chunk_by_buffer(static_cast<const char *>(it->get_buffer())));
+            total_copied += it->get_len();
             ++copy_start;
         } else {
-            wait_copy_len += it->length();
+            wait_copy_len += it->get_len();
         }
         ++it;
     }
@@ -413,24 +411,23 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
 
 sending:
     if (total_copied == 0) return -EAGAIN;
-    kassert(total_copied <= pending_bl.length());
-    ceph::buffer::list swapped;
-    if (total_copied < pending_bl.length()) {
+    kassert(total_copied <= pending_bl.get_len());
+    BufferList swapped;
+    if (total_copied < pending_bl.get_len()) {
         worker->perf_logger->inc(l_msgr_rdma_tx_parital_mem);
-        pending_bl.splice(total_copied, pending_bl.length() - total_copied, &swapped);
-        pending_bl.swap(swapped);
+        pending_bl.Move(total_copied);
     } else {
-        pending_bl.clear();
+        pending_bl.Clear();
     }
 
-    std::cout << __func__ << " left bytes: " << pending_bl.length() << " in buffers " << pending_bl.get_num_buffers() << " tx chunks "
-              << tx_buffers.size() << std::endl;
+    std::cout << __func__ << " left bytes: " << pending_bl.get_len() << " in buffers " << pending_bl.GetSize() << " tx chunks " << tx_buffers.size()
+              << std::endl;
 
     int r = post_work_request(tx_buffers);
     if (r < 0) return r;
 
     std::cout << __func__ << " finished sending " << total_copied << " bytes." << std::endl;
-    return pending_bl.length() ? -EAGAIN : 0;
+    return pending_bl.get_len() ? -EAGAIN : 0;
 }
 
 int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers) {

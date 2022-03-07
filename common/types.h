@@ -34,15 +34,15 @@ std::ostream& operator<<(std::ostream& out, const sockaddr* sa);
  * ipv4 for now.
  */
 struct entity_addr_t {
-    typedef enum {
+    enum class type_t {
         TYPE_SERVER = 0,
         TYPE_CLIENT = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
         TYPE_SWITCH = 2,  ///< msgr2 protocol (new in ceph kraken)
         TYPE_ANY = 3,     ///< ambiguous
-    } type_t;
-    static const type_t TYPE_DEFAULT = TYPE_SERVER;
+    };
+    static const type_t TYPE_DEFAULT = type_t::TYPE_SERVER;
 
-    uint32_t type;
+    type_t type;
     uint32_t nonce;
     union {
         sockaddr sa;
@@ -50,27 +50,27 @@ struct entity_addr_t {
         sockaddr_in6 sin6;
     } u;
 
-    static std::string_view get_type_name(int t) {
+    static std::string_view get_type_name(type_t t) {
         switch (t) {
-            case TYPE_SERVER:
+            case type_t::TYPE_SERVER:
                 return "Server";
-            case TYPE_CLIENT:
+            case type_t::TYPE_CLIENT:
                 return "Client";
-            case TYPE_SWITCH:
+            case type_t::TYPE_SWITCH:
                 return "Switch";
-            case TYPE_ANY:
+            case type_t::TYPE_ANY:
                 return "any";
             default:
                 return "NOT DEFINDE";
         }
     };
 
-    entity_addr_t() : type(0), nonce(0) { memset(&u, 0, sizeof(u)); }
-    entity_addr_t(uint32_t _type, uint32_t _nonce) : type(_type), nonce(_nonce) { memset(&u, 0, sizeof(u)); }
+    entity_addr_t() : type(TYPE_DEFAULT), nonce(0) { memset(&u, 0, sizeof(u)); }
+    entity_addr_t(type_t _type, uint32_t _nonce) : type(_type), nonce(_nonce) { memset(&u, 0, sizeof(u)); }
 
-    uint32_t get_type() const { return type; }
-    void set_type(uint32_t t) { type = t; }
-    bool is_any() const { return type == TYPE_ANY; }
+    type_t get_type() const { return type; }
+    void set_type(type_t t) { type = t; }
+    bool is_any() const { return type == type_t::TYPE_ANY; }
 
     uint32_t get_nonce() const { return nonce; }
     void set_nonce(uint32_t n) { nonce = n; }

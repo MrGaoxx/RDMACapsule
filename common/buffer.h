@@ -33,7 +33,7 @@ class Buffer {
 
 class BufferList {
    public:
-    explicit BufferList(Buffer& buffer) : buffer_list(), len(0){};
+    explicit BufferList() : buffer_list(), len(0){};
     explicit BufferList(Buffer& buffer) : buffer_list{buffer}, len(buffer.GetRemainingLen()){};
 
     BufferList& Append(const Buffer& buffer) {
@@ -41,6 +41,15 @@ class BufferList {
         len += buffer.GetRemainingLen();
         return *this;
     }
+
+    BufferList& Append(BufferList& bufferList) {
+        for (auto& buffer : bufferList.GetBufferList()) {
+            buffer_list.push_back(buffer);
+            len += buffer.GetRemainingLen();
+        }
+        return *this;
+    }
+
     // std::list<Buffer>& GetBufferList() { return buffer_list; }
 
     uint32_t Move(uint32_t size) {
@@ -80,6 +89,7 @@ class BufferList {
         return std::forward<BufferIterator>(rval);
     }
     void Clear() { buffer_list.clear(); }
+    std::list<Buffer>& GetBufferList() { return buffer_list; }
 
    private:
     std::list<Buffer> buffer_list;

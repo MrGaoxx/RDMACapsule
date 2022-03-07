@@ -148,7 +148,7 @@ void NetHandler::set_priority(int sd, int prio, int domain) {
 #endif  // SO_PRIORITY
 }
 
-int NetHandler::generic_connect(const entity_addr_t &addr, const entity_addr_t &bind_addr, bool nonblock) {
+int NetHandler::generic_connect(Context *context, const entity_addr_t &addr, const entity_addr_t &bind_addr, bool nonblock) {
     int ret;
     int s = create_socket(addr.get_family());
     if (s < 0) return s;
@@ -162,7 +162,6 @@ int NetHandler::generic_connect(const entity_addr_t &addr, const entity_addr_t &
     }
 
     set_socket_options(s, context->m_rdma_config_->m_tcp_nodelay_, context->m_rdma_config_->m_tcp_rcvbuf_bytes_);
-
     {
         entity_addr_t addr = bind_addr;
         if (context->m_rdma_config_->m_bind_before_connect_ && (!addr.is_blank_ip())) {
@@ -206,8 +205,12 @@ int NetHandler::reconnect(const entity_addr_t &addr, int sd) {
     return 0;
 }
 
-int NetHandler::connect(const entity_addr_t &addr, const entity_addr_t &bind_addr) { return generic_connect(addr, bind_addr, false); }
+int NetHandler::connect(Context *cct, const entity_addr_t &addr, const entity_addr_t &bind_addr) {
+    return generic_connect(cct, addr, bind_addr, false);
+}
 
-int NetHandler::nonblock_connect(const entity_addr_t &addr, const entity_addr_t &bind_addr) { return generic_connect(addr, bind_addr, true); }
+int NetHandler::nonblock_connect(Context *cct, const entity_addr_t &addr, const entity_addr_t &bind_addr) {
+    return generic_connect(cct, addr, bind_addr, true);
+}
 
 }  // namespace Network

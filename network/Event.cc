@@ -16,16 +16,36 @@
 
 #include "Event.h"
 
-#include "common/common.h"
-#ifdef HAVE_DPDK
-#include "dpdk/EventDPDK.h"
-#endif
+#include <fcntl.h>
+
 #include <vector>
 
 #include "EventEpoll.h"
+#include "common/common.h"
 
-#undef dout_prefix
-#define dout_prefix *_dout << "EventCallback "
+int pipe_cloexec(int pipefd[2], int flags) {
+    if (pipe(pipefd) == -1) return -1;
+
+    /*
+     * The old-fashioned, race-condition prone way that we have to fall
+     * back on if pipe2 does not exist.
+     */
+    if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) < 0) {
+        goto fail;
+    }
+
+    if (fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) < 0) {
+        goto fail;
+    }
+
+    return 0;
+fail:
+    int save_errno = errno;
+    close(pipefd[0]);
+    close(pipefd[1]);
+    return (errno = save_errno, -1);
+}
+
 class C_handle_notify : public EventCallback {
     EventCenter *center;
     Context *context;
@@ -43,9 +63,6 @@ class C_handle_notify : public EventCallback {
         } while (r > 0);
     }
 };
-
-#undef dout_prefix
-#define dout_prefix _event_prefix(_dout)
 
 /**
  * Construct a Poller.
@@ -81,7 +98,7 @@ EventCenter::Poller::~Poller() {
 }
 
 std::ostream &EventCenter::_event_prefix(std::ostream *_dout) {
-    return *_dout << "Event(" << this << " nevent=" << nevent << " time_id=" << time_event_next_id << ").";
+    return std::cout << "Event(" << this << " nevent=" << nevent << " time_id=" << time_event_next_id << ").";
 }
 
 int EventCenter::init(int nevent, unsigned center_id, const std::string &type) {
@@ -90,14 +107,7 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type) {
 
     this->type = type;
     this->center_id = center_id;
-
-    if (type == "dpdk") {
-#ifdef HAVE_DPDK
-        driver = new DPDKDriver(context);
-#endif
-    } else {
-        driver = new EpollDriver(context);
-    }
+    driver = new EpollDriver(context);
 
     if (!driver) {
         std::cout << __func__ << " failed to create event driver " << std::endl;
@@ -126,11 +136,11 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type) {
     notify_receive_fd = fds[0];
     notify_send_fd = fds[1];
 
-    r = net.set_nonblock(notify_receive_fd);
+    r = Network::NetHandler::set_nonblock(notify_receive_fd);
     if (r < 0) {
         return r;
     }
-    r = net.set_nonblock(notify_send_fd);
+    r = Network::NetHandler::set_nonblock(notify_send_fd);
     if (r < 0) {
         return r;
     }
@@ -150,8 +160,8 @@ EventCenter::~EventCenter() {
     time_events.clear();
     // assert(time_events.empty());
 
-    if (notify_receive_fd >= 0) compat_closesocket(notify_receive_fd);
-    if (notify_send_fd >= 0) compat_closesocket(notify_send_fd);
+    if (notify_receive_fd >= 0) close(notify_receive_fd);
+    if (notify_send_fd >= 0) close(notify_send_fd);
 
     delete driver;
     if (notify_handler) delete notify_handler;
@@ -161,8 +171,7 @@ void EventCenter::set_owner() {
     owner = pthread_self();
     std::cout << __func__ << " center_id=" << center_id << " owner=" << owner << std::endl;
     if (!global_centers) {
-        global_centers =
-            &context->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>("AsyncMessenger::EventCenter::global_center::" + type, true);
+        global_centers = &context->m_associateCenters;
         kassert(global_centers);
         global_centers->centers[center_id] = this;
         if (driver->need_wakeup()) {
@@ -200,7 +209,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt) {
         // add_event shouldn't report error, otherwise it must be a innermost bug!
         std::cout << __func__ << " add event failed, ret=" << r << " fd=" << fd << " mask=" << mask << " original mask is " << event->mask
                   << std::endl;
-        abort("BUG!");
+        abort();
         return r;
     }
 
@@ -228,7 +237,7 @@ void EventCenter::delete_file_event(int fd, int mask) {
     int r = driver->del_event(fd, event->mask, mask);
     if (r < 0) {
         // see create_file_event
-        abort("BUG!");
+        abort();
     }
 
     if (mask & EVENT_READABLE && event->read_cb) {
@@ -279,12 +288,8 @@ void EventCenter::wakeup() {
 
     std::cout << __func__ << std::endl;
     char buf = 'c';
-// wake up "event_wait"
-#ifdef _WIN32
-    int n = send(notify_send_fd, &buf, sizeof(buf), 0);
-#else
+    // wake up "event_wait"
     int n = write(notify_send_fd, &buf, sizeof(buf));
-#endif
     if (n < 0) {
         if (errno != EAGAIN) {
             std::cout << __func__ << " write notify pipe failed: " << cpp_strerror(errno) << std::endl;
@@ -296,7 +301,6 @@ void EventCenter::wakeup() {
 int EventCenter::process_time_events() {
     int processed = 0;
     clock_type::time_point now = clock_type::now();
-    using ceph::operator<<;
     std::cout << __func__ << " cur time is " << now << std::endl;
 
     while (!time_events.empty()) {
@@ -345,7 +349,7 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
     std::cout << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << std::endl;
     std::vector<FiredFileEvent> fired_events;
     numevents = driver->event_wait(fired_events, &tv);
-    auto working_start = ceph::mono_clock::now();
+    auto working_start = common::mono_clock::now();
     for (int event_id = 0; event_id < numevents; event_id++) {
         int rfired = 0;
         FileEvent *event;
@@ -392,7 +396,7 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
         for (uint32_t i = 0; i < pollers.size(); i++) numevents += pollers[i]->poll();
     }
 
-    if (working_dur) *working_dur = ceph::mono_clock::now() - working_start;
+    if (working_dur) *working_dur = common::mono_clock::now() - working_start;
     return numevents;
 }
 

@@ -21,13 +21,8 @@
 #include <sys/resource.h>
 #include <sys/time.h>
 
-#include "common/Cycles.h"
-#include "common/deleter.h"
-#include "include/compat.h"
-#include "include/str_list.h"
-
-#undef dout_prefix
-#define dout_prefix *_dout << "RDMAStack "
+#include "common/common_time.h"
+#include "common/perf_counters.h"
 
 RDMADispatcher::~RDMADispatcher() {
     std::cout << __func__ << " destructing rdma dispatcher" << std::endl;
@@ -39,7 +34,8 @@ RDMADispatcher::~RDMADispatcher() {
 }
 
 RDMADispatcher::RDMADispatcher(Context *c, std::shared_ptr<Infiniband> &ib) : context(c), ib(ib) {
-    PerfCountersBuilder plb(context, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
+    common::PerfCounter::PerfCountersBuilder plb(context, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first,
+                                                 l_msgr_rdma_dispatcher_last);
 
     plb.add_u64_counter(l_msgr_rdma_polling, "polling", "Whether dispatcher thread is polling");
     plb.add_u64_counter(l_msgr_rdma_inflight_tx_chunks, "inflight_tx_chunks", "The number of inflight tx chunks");
@@ -86,7 +82,7 @@ void RDMADispatcher::polling_start() {
     kassert(rx_cq);
 
     t = std::thread(&RDMADispatcher::polling, this);
-    ceph_pthread_setname(t.native_handle(), "rdma-polling");
+    // ceph_pthread_setname(t.native_handle(), "rdma-polling");
 }
 
 void RDMADispatcher::polling_stop() {
@@ -111,7 +107,7 @@ void RDMADispatcher::handle_async_event() {
     std::cout << __func__ << std::endl;
     while (1) {
         ibv_async_event async_event;
-        if (ibv_get_async_event(ib->get_device()->ctxt, &async_event)) {
+        if (ibv_get_async_event(ib->get_device()->get_context(), &async_event)) {
             if (errno != EAGAIN)
                 std::cout << __func__ << " ibv_get_async_event failed. (errno=" << errno << " " << cpp_strerror(errno) << ")" << std::endl;
             return;
@@ -123,7 +119,7 @@ void RDMADispatcher::handle_async_event() {
             /***********************CQ events********************/
             case IBV_EVENT_CQ_ERR:
                 std::cout << __func__ << " Fatal Error, effect all QP bound with same CQ, "
-                          << " CQ Overflow, dev = " << ib->get_device()->ctxt << " Need destroy and recreate resource " << std::endl;
+                          << " CQ Overflow, dev = " << ib->get_device()->get_context() << " Need destroy and recreate resource " << std::endl;
                 break;
             /***********************QP events********************/
             case IBV_EVENT_QP_FATAL: {
@@ -163,7 +159,7 @@ void RDMADispatcher::handle_async_event() {
                 } else {
                     conn->fault();
                     if (qp) {
-                        if (!context->m_rdma_config_->m_use_rdma_cm) {
+                        if (!context->m_rdma_config_->m_use_rdma_cm_) {
                             enqueue_dead_qp_lockless(qpn);
                         }
                     }
@@ -221,12 +217,12 @@ void RDMADispatcher::handle_async_event() {
             // CA events:
             case IBV_EVENT_DEVICE_FATAL:
                 /* CA is in FATAL state */
-                std::cout << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->ctxt
+                std::cout << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->get_context()
                           << " evt: " << ibv_event_type_str(async_event.event_type) << std::endl;
                 break;
             default:
-                std::cout << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->ctxt << " unknown event: " << async_event.event_type
-                          << std::endl;
+                std::cout << __func__ << " ibv_get_async_event: dev = " << ib->get_device()->get_context()
+                          << " unknown event: " << async_event.event_type << std::endl;
                 break;
         }
         ibv_ack_async_event(&async_event);
@@ -297,7 +293,7 @@ void RDMADispatcher::polling() {
             if (!num_qp_conn && done && dead_queue_pairs.empty()) break;
 
             uint64_t now = Cycles::rdtsc();
-            if (Cycles::to_microseconds(now - last_inactive) > context->m_rdma_config_->ms_async_rdma_polling_us) {
+            if (Cycles::to_microseconds(now - last_inactive) > context->m_rdma_config_->m_rdma_polling_us_) {
                 handle_async_event();
                 if (!rearmed) {
                     // Clean up cq events after rearm notify ensure no new incoming event
@@ -608,16 +604,16 @@ RDMAWorker::RDMAWorker(Context *c, unsigned worker_id) : Worker(c, worker_id), t
     // initialize perf_logger
     char name[128];
     sprintf(name, "AsyncMessenger::RDMAWorker-%u", id);
-    PerfCountersBuilder plb(context, name, l_msgr_rdma_first, l_msgr_rdma_last);
+    common::PerfCounter::PerfCountersBuilder plb(context, name, l_msgr_rdma_first, l_msgr_rdma_last);
 
     plb.add_u64_counter(l_msgr_rdma_tx_no_mem, "tx_no_mem", "The count of no tx buffer");
     plb.add_u64_counter(l_msgr_rdma_tx_parital_mem, "tx_parital_mem", "The count of parital tx buffer");
     plb.add_u64_counter(l_msgr_rdma_tx_failed, "tx_failed_post", "The number of tx failed posted");
 
     plb.add_u64_counter(l_msgr_rdma_tx_chunks, "tx_chunks", "The number of tx chunks transmitted");
-    plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted", NULL, 0, static_cast<unit_t>(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
     plb.add_u64_counter(l_msgr_rdma_rx_chunks, "rx_chunks", "The number of rx chunks transmitted");
-    plb.add_u64_counter(l_msgr_rdma_rx_bytes, "rx_bytes", "The bytes of rx chunks transmitted", NULL, 0, static_cast<unit_t>(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_rdma_rx_bytes, "rx_bytes", "The bytes of rx chunks transmitted", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
     plb.add_u64_counter(l_msgr_rdma_pending_sent_conns, "pending_sent_conns", "The count of pending sent conns");
 
     perf_logger = plb.create_perf_counters();
@@ -633,11 +629,9 @@ int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOption
     dispatcher->polling_start();
 
     RDMAServerSocketImpl *p;
-    if (context->m_rdma_config_->ms_async_rdma_type == "iwarp") {
-        p = new RDMAIWARPServerSocketImpl(context, ib, dispatcher, this, sa, addr_slot);
-    } else {
-        p = new RDMAServerSocketImpl(context, ib, dispatcher, this, sa, addr_slot);
-    }
+
+    p = new RDMAServerSocketImpl(context, ib, dispatcher, this, sa, addr_slot);
+
     int r = p->listen(sa, opt);
     if (r < 0) {
         delete p;
@@ -653,11 +647,7 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
     dispatcher->polling_start();
 
     RDMAConnectedSocketImpl *p;
-    if (context->m_rdma_config_->ms_async_rdma_type == "iwarp") {
-        p = new RDMAIWARPConnectedSocketImpl(context, ib, dispatcher, this);
-    } else {
-        p = new RDMAConnectedSocketImpl(context, ib, dispatcher, this);
-    }
+    p = new RDMAConnectedSocketImpl(context, ib, dispatcher, this);
     int r = p->try_connect(addr, opts);
 
     if (r < 0) {
@@ -717,7 +707,7 @@ RDMAStack::RDMAStack(Context *context)
 }
 
 RDMAStack::~RDMAStack() {
-    if (context->m_rdma_config_->ms_async_rdma_enable_hugepage) {
+    if (context->m_rdma_config_->m_rdma_enable_hugepage_) {
         unsetenv("RDMAV_HUGEPAGES_SAFE");  // remove env variable on destruction
     }
 }

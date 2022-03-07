@@ -22,11 +22,10 @@
 #include "Stack.h"
 
 class PosixWorker : public Worker {
-    Network::NetHandler net;
     void initialize() override;
 
    public:
-    PosixWorker(Context *c, unsigned i) : Worker(c, i), net(c) {}
+    PosixWorker(Context *c, unsigned i) : Worker(c, i) {}
     int listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptions &opt, ServerSocket *socks) override;
     int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
 };

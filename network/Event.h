@@ -70,10 +70,7 @@ class EventDriver {
 class EventCenter {
    public:
     // should be enough;
-    static const int MAX_EVENTCENTER = 24;
-
-   private:
-    using clock_type = common::coarse_mono_clock;
+    static const int MAX_EVENTCENTER = 96;
 
     struct AssociatedCenters {
         EventCenter *centers[MAX_EVENTCENTER];
@@ -82,6 +79,9 @@ class EventCenter {
             memset(centers, 0, MAX_EVENTCENTER * sizeof(EventCenter *));
         }
     };
+
+   private:
+    using clock_type = common::coarse_mono_clock;
 
     struct FileEvent {
         int mask;
@@ -154,7 +154,6 @@ class EventCenter {
     uint64_t time_event_next_id;
     int notify_receive_fd;
     int notify_send_fd;
-    Network::NetHandler net;
     EventCallbackRef notify_handler;
     unsigned center_id;
     AssociatedCenters *global_centers = nullptr;
@@ -174,7 +173,6 @@ class EventCenter {
           time_event_next_id(1),
           notify_receive_fd(-1),
           notify_send_fd(-1),
-          net(c),
           notify_handler(NULL),
           center_id(0) {}
     ~EventCenter();
@@ -220,7 +218,7 @@ class EventCenter {
             if (del) delete this;
         }
         void wait() {
-            ceph_assert(!nonwait);
+            kassert(!nonwait);
             std::unique_lock<std::mutex> l(lock);
             while (!done) cond.wait(l);
         }
@@ -229,9 +227,9 @@ class EventCenter {
    public:
     template <typename func>
     void submit_to(int i, func &&f, bool always_async = false) {
-        ceph_assert(i < MAX_EVENTCENTER && global_centers);
+        kassert(i < MAX_EVENTCENTER && global_centers);
         EventCenter *c = global_centers->centers[i];
-        ceph_assert(c);
+        kassert(c);
         if (always_async) {
             C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
             c->dispatch_event_external(event);

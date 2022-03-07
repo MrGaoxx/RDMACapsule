@@ -95,7 +95,7 @@ Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictx
 #endif
 }
 
-Device::Device(Context *context, ibv_device *ib_dev) : device(ib_dev), get_port()(nullptr) {
+Device::Device(Context *context, ibv_device *ib_dev) : device(ib_dev), active_port(nullptr) {
     kassert(device);
     ctxt = ibv_open_device(device);
     kassert(ctxt);
@@ -109,7 +109,7 @@ Device::Device(Context *context, ibv_device *ib_dev) : device(ib_dev), get_port(
     }
 }
 
-Device::Device(Context *context, struct ibv_context *ib_ctx) : device(ib_ctx->device), get_port()(nullptr) {
+Device::Device(Context *context, struct ibv_context *ib_ctx) : device(ib_ctx->device), active_port()(nullptr) {
     kassert(device);
     ctxt = ib_ctx;
     kassert(ctxt);
@@ -144,8 +144,7 @@ void Device::binding_port(Context *context, int port_num) {
 }
 
 Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type type, int port, ibv_srq *srq, Infiniband::CompletionQueue *txcq,
-                                 Infiniband::CompletionQueue *rxcq, uint32_t tx_queue_len, uint32_t rx_queue_len, struct rdma_cm_id *cid,
-                                 uint32_t q_key)
+                                 Infiniband::CompletionQueue *rxcq, uint32_t tx_queue_len, uint32_t rx_queue_len, rdma_cm_id *cid, uint32_t q_key)
     : context(c),
       infiniband(infiniband),
       type(type),
@@ -525,7 +524,7 @@ int Infiniband::CompletionChannel::init() {
         std::cout << __func__ << " failed to create receive completion channel: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    int rc = Network::NetHandler(context).set_nonblock(channel->fd);
+    int rc = Network::NetHandler::set_nonblock(channel->fd);
     if (rc < 0) {
         ibv_destroy_comp_channel(channel);
         return -1;
@@ -935,7 +934,7 @@ void Infiniband::init() {
     device->binding_port(context, port_num);
     ib_physical_port = device->get_port()->get_port_num();
     pd = new ProtectionDomain(context, device);
-    kassert(Network::NetHandler(context).set_nonblock(device->get_context()->async_fd) == 0);
+    kassert(Network::NetHandler::set_nonblock(device->get_context()->async_fd) == 0);
 
     support_srq = context->m_rdma_config_->m_rdma_support_srq_;
     if (support_srq) {
@@ -960,8 +959,8 @@ void Infiniband::init() {
 
     // Keep extra one WR for a beacon to indicate all WCEs were consumed
     tx_queue_len = device->get_device_attr()->max_qp_wr - 1;
-    if (tx_queue_len > context->m_rdma_config_->m_rdma_send_buffers_) {
-        tx_queue_len = context->m_rdma_config_->m_rdma_send_buffers_;
+    if (tx_queue_len > context->m_rdma_config_->m_rdma_send_queeu_len_) {
+        tx_queue_len = context->m_rdma_config_->m_rdma_send_queeu_len_;
         std::cout << __func__ << " assigning: " << tx_queue_len << " send buffers" << std::endl;
     } else {
         std::cout << __func__ << " using the max allowed send buffers: " << tx_queue_len << std::endl;
