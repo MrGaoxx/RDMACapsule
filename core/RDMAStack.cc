@@ -624,13 +624,13 @@ RDMAWorker::~RDMAWorker() { delete tx_handler; }
 
 void RDMAWorker::initialize() { kassert(dispatcher); }
 
-int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptions &opt, ServerSocket *sock) {
+int RDMAWorker::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) {
     ib->init();
     dispatcher->polling_start();
 
     RDMAServerSocketImpl *p;
 
-    p = new RDMAServerSocketImpl(context, ib, dispatcher, this, sa, addr_slot);
+    p = new RDMAServerSocketImpl(context, ib, dispatcher, this, sa);
 
     int r = p->listen(sa, opt);
     if (r < 0) {

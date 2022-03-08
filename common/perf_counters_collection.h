@@ -29,11 +29,11 @@ class PerfCountersCollection {
 };
 
 class PerfCountersDeleter {
-    Context *config;
+    Context *context;
 
    public:
-    PerfCountersDeleter() noexcept : config(nullptr) {}
-    PerfCountersDeleter(Context *config) noexcept : config(config) {}
+    PerfCountersDeleter() noexcept : context(nullptr) {}
+    PerfCountersDeleter(Context *context) noexcept : context(context) {}
     void operator()(PerfCounters *p) noexcept;
 };
 }  // namespace common::PerfCounter

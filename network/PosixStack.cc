@@ -143,7 +143,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
     int _fd;
 
    public:
-    explicit PosixServerSocketImpl(int f, const entity_addr_t &listen_addr, unsigned slot) : ServerSocketImpl(listen_addr.get_type(), slot), _fd(f) {}
+    explicit PosixServerSocketImpl(int f, const entity_addr_t &listen_addr) : ServerSocketImpl(listen_addr.get_type()), _fd(f) {}
     int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     void abort_accept() override {
         ::close(_fd);
@@ -186,7 +186,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
 
 void PosixWorker::initialize() {}
 
-int PosixWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptions &opt, ServerSocket *sock) {
+int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *sock) {
     int listen_sd = Network::NetHandler::create_socket(sa.get_family(), true);
     if (listen_sd < 0) {
         return -errno;
@@ -220,7 +220,7 @@ int PosixWorker::listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptio
         return r;
     }
 
-    *sock = ServerSocket(std::unique_ptr<PosixServerSocketImpl>(new PosixServerSocketImpl(listen_sd, sa, addr_slot)));
+    *sock = ServerSocket(std::unique_ptr<PosixServerSocketImpl>(new PosixServerSocketImpl(listen_sd, sa)));
     return 0;
 }
 

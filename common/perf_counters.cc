@@ -16,6 +16,7 @@
 #include "perf_counters.h"
 
 #include "common.h"
+#include "common/context.h"
 
 using std::make_pair;
 using std::ostringstream;

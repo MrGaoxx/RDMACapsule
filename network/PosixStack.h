@@ -26,7 +26,7 @@ class PosixWorker : public Worker {
 
    public:
     PosixWorker(Context *c, unsigned i) : Worker(c, i) {}
-    int listen(entity_addr_t &sa, unsigned addr_slot, const SocketOptions &opt, ServerSocket *socks) override;
+    int listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocket *socks) override;
     int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
 };
 

@@ -30,6 +30,7 @@
 #include "common/common_time.h"
 #include "perf_histogram.h"
 
+struct Context;
 namespace common::PerfCounter {
 class PerfCountersBuilder;
 class PerfCounters;
@@ -57,7 +58,7 @@ enum class unit_t : uint8_t { UNIT_BYTES, UNIT_NONE };
 namespace common::PerfCounter {
 class PerfCountersBuilder {
    public:
-    PerfCountersBuilder(Context *config, const std::string &name, int first, int last);
+    PerfCountersBuilder(Context *context, const std::string &name, int first, int last);
     ~PerfCountersBuilder();
 
     // prio values: higher is better, and higher values get included in
@@ -218,7 +219,7 @@ class PerfCounters {
     int get_adjusted_priority(int p) const { return std::max(std::min(p + prio_adjust, (int)PerfCountersBuilder::PRIO_CRITICAL), 0); }
 
    private:
-    PerfCounters(Context *config, const std::string &name, int lower_bound, int upper_bound);
+    PerfCounters(Context *context, const std::string &name, int lower_bound, int upper_bound);
     PerfCounters(const PerfCounters &rhs);
     PerfCounters &operator=(const PerfCounters &rhs);
 

@@ -54,8 +54,6 @@ struct RDMAConfig {
     uint32_t m_tcp_rcvbuf_bytes_ = 65536;
 
     uint16_t m_op_threads_num_ = 32;
-    entity_addr_t m_my_addr;
-    entity_addr_t m_peer_addr;
 #ifdef HAVE_MULTICAST
     MulticastManagementConnectGroup*;
 #endif

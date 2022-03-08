@@ -134,7 +134,7 @@ class RDMAWorker : public Worker {
     PerfCounters *perf_logger;
     explicit RDMAWorker(Context *c, unsigned i);
     virtual ~RDMAWorker();
-    virtual int listen(entity_addr_t &addr, unsigned addr_slot, const SocketOptions &opts, ServerSocket *) override;
+    virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
     virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
     virtual void initialize() override;
     int get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk *> &c, size_t bytes);
@@ -247,7 +247,7 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 
    public:
     RDMAServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher, RDMAWorker *w,
-                         entity_addr_t &a, unsigned slot);
+                         entity_addr_t &a);
 
     virtual int listen(entity_addr_t &sa, const SocketOptions &opt);
     virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;

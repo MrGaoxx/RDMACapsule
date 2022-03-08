@@ -18,31 +18,24 @@
 #include "network/net_handler.h"
 
 RDMAServerSocketImpl::RDMAServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher,
-                                           RDMAWorker *w, entity_addr_t &a, unsigned slot)
-    : ServerSocketImpl(a.get_type(), slot),
-      context(context),
-      net(context),
-      server_setup_socket(-1),
-      ib(ib),
-      dispatcher(rdma_dispatcher),
-      worker(w),
-      sa(a) {}
+                                           RDMAWorker *w, entity_addr_t &a)
+    : ServerSocketImpl(a.get_type()), context(context), server_setup_socket(-1), ib(ib), dispatcher(rdma_dispatcher), worker(w), sa(a) {}
 
 int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt) {
     int rc = 0;
-    server_setup_socket = net.create_socket(sa.get_family(), true);
+    server_setup_socket = Network::NetHandler::create_socket(sa.get_family(), true);
     if (server_setup_socket < 0) {
         rc = -errno;
         std::cout << __func__ << " failed to create server socket: " << cpp_strerror(errno) << std::endl;
         return rc;
     }
 
-    rc = net.set_nonblock(server_setup_socket);
+    rc = Network::NetHandler::set_nonblock(server_setup_socket);
     if (rc < 0) {
         goto err;
     }
 
-    rc = net.set_socket_options(server_setup_socket, opt.nodelay, opt.rcbuf_size);
+    rc = Network::NetHandler::set_socket_options(server_setup_socket, opt.nodelay, opt.rcbuf_size);
     if (rc < 0) {
         goto err;
     }
@@ -83,13 +76,13 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
         return -errno;
     }
 
-    int r = net.set_nonblock(sd);
+    int r = Network::NetHandler::set_nonblock(sd);
     if (r < 0) {
         ::close(sd);
         return -errno;
     }
 
-    r = net.set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
+    r = Network::NetHandler::set_socket_options(sd, opt.nodelay, opt.rcbuf_size);
     if (r < 0) {
         ::close(sd);
         return -errno;
@@ -99,7 +92,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 
     out->set_type(addr_type);
     out->set_sockaddr((sockaddr *)&ss);
-    net.set_priority(sd, opt.priority, out->get_family());
+    Network::NetHandler::set_priority(sd, opt.priority, out->get_family());
 
     RDMAConnectedSocketImpl *server;
     // Worker* w = dispatcher->get_stack()->get_worker();

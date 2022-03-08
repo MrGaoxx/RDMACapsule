@@ -25,7 +25,7 @@
 class EpollDriver : public EventDriver {
     int epfd;
     struct epoll_event *events;
-    Context *config;
+    Context *context;
     int nevent;
 
    public:
