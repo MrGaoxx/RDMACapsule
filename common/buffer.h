@@ -19,6 +19,7 @@ class Buffer {
     uint32_t get_len() { return len; }
     uint32_t GetRemainingLen() const { return static_cast<uint32_t>(len + start - cur); }
     void* get_buffer() { return cur; }
+    void* get_raw_buffer() { return start; }
     uint32_t Move(uint32_t size) {
         void* prev = cur;
         cur = ((start + len) > (cur + size)) ? cur + size : start + len;

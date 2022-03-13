@@ -3,7 +3,8 @@
 
 #include <atomic>
 #include <iostream>
-#define HAVE_MULTICAST
+
+//#define HAVE_MULTICAST
 #ifdef HAVE_MULTICAST
 #include "multicast/multicast.h"
 #endif
