@@ -1,6 +1,7 @@
 #include "perf_counters_collection.h"
 
 #include "common.h"
+#include "common/context.h"
 namespace common::PerfCounter {
 /* PerfcounterCollection hold the lock for PerfCounterCollectionImp */
 PerfCountersCollection::PerfCountersCollection(Context *context) : m_context(context), m_lock() {}
@@ -26,7 +27,7 @@ void PerfCountersCollection::with_counters(std::function<void(const PerfCounters
     perf_impl.with_counters(fn);
 }
 void PerfCountersDeleter::operator()(PerfCounters *p) noexcept {
-    if (config) config->get_perfcounters_collection()->remove(p);
+    if (context) context->get_perfcounters_collection()->remove(p);
     delete p;
 }
 

@@ -30,7 +30,7 @@ static const uint32_t MAX_INLINE_DATA = 0;
 static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 static const uint32_t CQ_DEPTH = 30000;
 
-Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictxt), port_num(ipn), gid_idx(context->m_rdma_config_->m_gid_index) {
+Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictxt), port_num(ipn), gid_idx(context->m_rdma_config_->m_gid_index_) {
     int r = ibv_query_port(ctxt, port_num, &port_attr);
     if (r == -1) {
         std::cout << __func__ << " query port failed  " << cpp_strerror(errno) << std::endl;
@@ -109,7 +109,7 @@ Device::Device(Context *context, ibv_device *ib_dev) : device(ib_dev), active_po
     }
 }
 
-Device::Device(Context *context, struct ibv_context *ib_ctx) : device(ib_ctx->device), active_port()(nullptr) {
+Device::Device(Context *context, struct ibv_context *ib_ctx) : device(ib_ctx->device), active_port(nullptr) {
     kassert(device);
     ctxt = ib_ctx;
     kassert(ctxt);
@@ -828,7 +828,7 @@ Infiniband::MemoryManager::MemoryManager(Context *c, Device *d, ProtectionDomain
                  device->get_device_attr()->max_mr_size / (sizeof(Chunk) + context->m_rdma_config_->m_rdma_buffer_size_bytes_)) {}
 
 Infiniband::MemoryManager::~MemoryManager() {
-    if (send) delete send;
+    if (send_buffers) delete send_buffers;
 }
 
 void *Infiniband::MemoryManager::huge_pages_malloc(size_t size) {
@@ -872,13 +872,13 @@ void Infiniband::MemoryManager::create_tx_pool(uint32_t size, uint32_t tx_num) {
     kassert(device);
     kassert(pd);
 
-    send = new Cluster(*this, size);
-    send->fill(tx_num);
+    send_buffers = new Cluster(*this, size);
+    send_buffers->fill(tx_num);
 }
 
-void Infiniband::MemoryManager::return_tx(std::vector<Chunk *> &chunks) { send->take_back(chunks); }
+void Infiniband::MemoryManager::return_tx(std::vector<Chunk *> &chunks) { send_buffers->take_back(chunks); }
 
-int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk *> &c, size_t bytes) { return send->get_buffers(c, bytes); }
+int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk *> &c, size_t bytes) { return send_buffers->get_buffers(c, bytes); }
 
 static std::atomic<bool> init_prereq = {false};
 

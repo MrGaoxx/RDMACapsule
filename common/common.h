@@ -1,9 +1,13 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include <atomic>
-#include <iostream>
+#include <asm/errno.h>
 
+#include <atomic>
+#include <cstring>
+#include <iostream>
+#include <sstream>
+#include <utility>
 //#define HAVE_MULTICAST
 #ifdef HAVE_MULTICAST
 #include "multicast/multicast.h"
@@ -28,6 +32,9 @@ std::string cpp_strerror(int err) {
 
     return oss.str();
 }
+
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 namespace common {
 
@@ -85,5 +92,32 @@ inline void spin_unlock(common::spinlock* lock) { spin_unlock(*lock); }
         __i;                          \
     })
 #endif
+
+template <typename F>
+struct scope_guard {
+    F f;
+    scope_guard() = delete;
+    scope_guard(const scope_guard&) = delete;
+    scope_guard(scope_guard&&) = default;
+    scope_guard& operator=(const scope_guard&) = delete;
+    scope_guard& operator=(scope_guard&&) = default;
+    scope_guard(const F& f) : f(f) {}
+    scope_guard(F&& f) : f(std::move(f)) {}
+    template <typename... Args>
+    scope_guard(std::in_place_t, Args&&... args) : f(std::forward<Args>(args)...) {}
+    ~scope_guard() {
+        std::move(f)();  // Support at-most-once functions
+    }
+};
+
+template <typename F>
+scope_guard<F> make_scope_guard(F&& f) {
+    return scope_guard<F>(std::forward<F>(f));
+}
+
+template <typename F, typename... Args>
+scope_guard<F> make_scope_guard(std::in_place_type_t<F>, Args&&... args) {
+    return {std::in_place, std::forward<Args>(args)...};
+}
 
 #endif

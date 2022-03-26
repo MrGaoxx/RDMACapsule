@@ -27,7 +27,7 @@
 #include <mutex>
 
 #include "common/common_time.h"
-#include "net_handler.h"
+//#include "net_handler.h"
 
 #define EVENT_NONE 0
 #define EVENT_READABLE 1

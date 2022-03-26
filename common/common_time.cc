@@ -21,29 +21,6 @@
 namespace common {
 using std::chrono::nanoseconds;
 using std::chrono::seconds;
-void real_clock::to_timespec(const time_point& t, struct timespec& ts) {
-    ts.tv_sec = to_time_t(t);
-    ts.tv_nsec = (t.time_since_epoch() % 1).count();
-}
-struct timespec real_clock::to_timespec(const time_point& t) {
-    struct timespec ts;
-    to_timespec(t, ts);
-    return ts;
-}
-real_clock::time_point real_clock::from_timespec(const struct timespec& ts) { return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec)); }
-
-void coarse_real_clock::to_timespec(const time_point& t, struct timespec& ts) {
-    ts.tv_sec = to_time_t(t);
-    ts.tv_nsec = (t.time_since_epoch() % seconds(1)).count();
-}
-struct timespec coarse_real_clock::to_timespec(const time_point& t) {
-    struct timespec ts;
-    to_timespec(t, ts);
-    return ts;
-}
-coarse_real_clock::time_point coarse_real_clock::from_timespec(const struct timespec& ts) {
-    return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
-}
 
 using std::chrono::duration_cast;
 using std::chrono::microseconds;
@@ -176,9 +153,9 @@ template <typename Rep, typename Period>
 ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t) {
     if constexpr (chrono::treat_as_floating_point_v<Rep> || Period::den > 1) {
         using seconds_t = chrono::duration<float>;
-        ::fmt::print(m, "{:.9}", chrono::duration_cast<seconds_t>(t));
+        m << "{:.9}" << chrono::duration_cast<seconds_t>(t);
     } else {
-        ::fmt::print(m, "{}", t);
+        m << "{}" << t;
     }
     return m;
 }

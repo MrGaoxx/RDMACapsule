@@ -120,9 +120,9 @@ class real_clock {
         return time_point(std::chrono::seconds(ts.tv_sec) + std::chrono::nanoseconds(ts.tv_nsec));
     }
 
-    static void to_timespec(const time_point& t, struct timespec& ts);
-    static struct timespec to_timespec(const time_point& t);
-    static time_point from_timespec(const struct timespec& ts);
+    // static void to_timespec(const time_point& t, struct timespec& ts);
+    // static struct timespec to_timespec(const time_point& t);
+    // static time_point from_timespec(const struct timespec& ts);
 
     static void to_timeval(const time_point& t, struct timeval& tv) {
         tv.tv_sec = to_time_t(t);
@@ -189,9 +189,9 @@ class coarse_real_clock {
         return time_point(std::chrono::seconds(ts.tv_sec) + std::chrono::nanoseconds(ts.tv_nsec));
     }
 
-    static void to_timespec(const time_point& t, struct timespec& ts);
-    static struct timespec to_timespec(const time_point& t);
-    static time_point from_timespec(const struct timespec& ts);
+    // static void to_timespec(const time_point& t, struct timespec& ts);
+    // static struct timespec to_timespec(const time_point& t);
+    // static time_point from_timespec(const struct timespec& ts);
 
     static void to_timeval(const time_point& t, struct timeval& tv) {
         tv.tv_sec = to_time_t(t);

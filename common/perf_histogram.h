@@ -144,7 +144,7 @@ class PerfHistogram : public PerfHistogramCommon {
         return get_raw_index_internal<0>(
             [](int64_t bucket, const axism_rdma_config_ig_d &ac) {
                 kassert(bucket >= 0);
-                kassertf(bucket < ac.m_buckets);
+                kassert(bucket < ac.m_buckets);
                 return bucket;
             },
             0, buckets...);

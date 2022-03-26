@@ -11,21 +11,9 @@
 #include "common/perf_counters_collection.h"
 #include "network/Event.h"
 
-struct RDMAConfig;
 namespace common::PerfCounter {
 class PerfCountersCollection;
 }
-struct Context {
-    Context(std::string& config_file) : m_rdma_config_(new RDMAConfig(config_file)), m_counter_collection_(this), m_associateCenters(){};
-    Context(RDMAConfig* config_) : m_rdma_config_(config_), m_counter_collection_(this){};
-    ~Context() { delete m_rdma_config_; }
-
-    common::PerfCounter::PerfCountersCollection* get_perfcounters_collection() { return &m_counter_collection_; }
-
-    RDMAConfig* m_rdma_config_;
-    common::PerfCounter::PerfCountersCollection m_counter_collection_;
-    EventCenter::AssociatedCenters m_associateCenters;
-};
 
 #ifdef HAVE_MULTICAST
 class MulticastConnectGroup;
@@ -46,7 +34,7 @@ struct RDMAConfig {
     uint8_t m_rdma_sl_ = 0;
     uint8_t m_rdma_port_num_ = 0;
 
-    uint32_t m_rdma_buffer_size_bytes_ = 4294967296;
+    uint32_t m_rdma_buffer_size_bytes_ = 32768;
     uint32_t m_rdma_send_queeu_len_ = 128;
     uint32_t m_rdma_receive_buffers_bytes_ = 65536;
     uint32_t m_rdma_receive_queue_len_ = 128;
@@ -103,5 +91,17 @@ inline void RDMAConfig::parse(std::string& key, std::string& val) {
     }
     return;
 }
+
+struct Context {
+    Context(std::string& config_file) : m_rdma_config_(new RDMAConfig(config_file)), m_counter_collection_(this), m_associateCenters(){};
+    Context(RDMAConfig* config_) : m_rdma_config_(config_), m_counter_collection_(this){};
+    ~Context() { delete m_rdma_config_; }
+
+    common::PerfCounter::PerfCountersCollection* get_perfcounters_collection() { return &m_counter_collection_; }
+
+    RDMAConfig* m_rdma_config_;
+    common::PerfCounter::PerfCountersCollection m_counter_collection_;
+    EventCenter::AssociatedCenters m_associateCenters;
+};
 
 #endif
