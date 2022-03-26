@@ -4,55 +4,102 @@
 #include <netinet/ip.h>
 
 #include "RDMAStack.h"
+#include "common.h"
 #include "common/context.h"
 #include "core/Infiniband.h"
-class RDMAServer {
+class RDMAPingPongServer {
    public:
-    RDMAServer();
-    int Init();
+    RDMAPingPongServer(std::string& configFileName);
+    ~RDMAPingPongServer();
+    void Init();
+    int Listen(const char* serverPort);
+    ConnectedSocket* Accept();
+    void Poll();
+
+    RDMAStack* get_rdma_stack() { return reinterpret_cast<RDMAStack*>(rdma_stack.get()); }
+    ConnectedSocket* get_connected_socket() { return &connected_socket; }
+    static const uint32_t kRequestSize = 32767 * 1024;
+    static const uint32_t kNumRequest = 8;
+    char recv_buffer[kRequestSize][kNumRequest];
+    uint8_t pos;
 
    private:
-    Context cct;
+    RDMAConfig* rdma_config;
+    Context* context;
+    std::shared_ptr<NetworkStack> rdma_stack;
+
+    bool is_listening;
+    ConnectedSocket connected_socket;
+    entity_addr_t client_addr;
+    SocketOptions server_sockopts;
+    ServerSocket* server_sock;
 };
 
-int main(int argc, char** argv) {
-    RDMAConfig* config = new RDMAConfig(std::string(argv[1]));
-    config->m_op_threads_num_ = 1;
-    Context* cct = new Context(config);
-
-    std::shared_ptr<NetworkStack> networkStack = NetworkStack::create(cct, "rdma");
-
-    networkStack->start();
-
-    // for (int i = 0; i < networkStack->get_num_worker(); i++) {
-    // use the first worker to connect
-    Worker* worker = networkStack->get_worker(0);
-
+RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName) : is_listening(false), pos(0) {
+    rdma_config = new RDMAConfig(configFileName);
+    rdma_config->m_op_threads_num_ = 1;
+    context = new Context(rdma_config);
+    rdma_stack = NetworkStack::create(context, "rdma");
+    // recv_buffer = reinterpret_cast<char*>(malloc(kRequestSize * kNumRequest));
+}
+RDMAPingPongServer::~RDMAPingPongServer() {
+    delete rdma_config;
+    delete context;
+    // free(reinterpret_cast<void*>(recv_buffer));
+}
+void RDMAPingPongServer::Init() { rdma_stack->start(); }
+int RDMAPingPongServer::Listen(const char* serverPort) {
+    if (unlikely(is_listening)) {
+        return -EBUSY;
+    }
+    Worker* worker = rdma_stack->get_worker(0);
     entity_addr_t server_addr(entity_addr_t::type_t::TYPE_SERVER, 0);  // nonce = 0
     server_addr.set_family(AF_INET);
     sockaddr_in sa;
-    inet_pton(AF_INET, config->m_ipAddr.c_str(), &sa.sin_addr);
+    inet_pton(AF_INET, rdma_config->m_ipAddr.c_str(), &sa.sin_addr);
     sa.sin_family = AF_INET;
-    sa.sin_port = htons(atoi(argv[2]));
+    sa.sin_port = htons(atoi(serverPort));
     server_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&sa));
 
-    SocketOptions opts;
-    {
-        opts.connect_bind_addr = server_addr;
-        opts.nodelay = true;
-        opts.nonblock = true;
-        opts.priority = IPTOS_CLASS_CS3;
-        opts.rcbuf_size = 32 * 1024;
-    }
-    ServerSocket* sock;
+    server_sockopts.connect_bind_addr = server_addr;
+    server_sockopts.nodelay = true;
+    server_sockopts.nonblock = true;
+    server_sockopts.priority = IPTOS_CLASS_CS3;
+    server_sockopts.rcbuf_size = 32 * 1024;
 
     std::cout << "SERVER:: listening on the addr" << server_addr << std::endl;
-    int error;
-    if (error = worker->listen(server_addr, opts, sock)) {
+    int error = worker->listen(server_addr, server_sockopts, server_sock);
+    is_listening = ~error;
+    return error;
+}
+ConnectedSocket* RDMAPingPongServer::Accept() { server_sock->accept(&connected_socket, server_sockopts, &client_addr, rdma_stack->get_worker(0)); };
+void RDMAPingPongServer::Poll() {
+    while (true) {
+        int rs = connected_socket.read(recv_buffer[pos], kRequestSize);
+        if (rs != 0) {
+            if (unlikely(rs != kRequestSize)) {
+                std::cout << "!!! read the recv buffer of size:[" << rs << "] expected:[" << kRequestSize << "]" << std::endl;
+            }
+            std::cout << "read the recv buffer \n";
+            for (auto& i : recv_buffer[pos]) {
+                std::cout << i << " ";
+            }
+            std::cout << std::endl;
+            pos = (pos + 1) % kNumRequest;
+        }
+    }
+}
+
+int main(int argc, char** argv) {
+    std::string configFileName(argv[1]);
+    RDMAPingPongServer server(configFileName);
+    server.Init();
+    int error = server.Listen(argv[2]);
+    if (unlikely(error)) {
         std::cout << "worker cannot listen socket on addr" << cpp_strerror(error) << std::endl;
         return;
     };
-    entity_addr_t client_addr;
-    ConnectedSocket cs;
-    sock->accept(&cs, opts, &client_addr, worker);
+    server.Accept();
+    server.Poll();
+    return;
 }

@@ -2,50 +2,62 @@
 #include <ifaddrs.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
+#include <stdint.h>
 
 #include "RDMAStack.h"
 #include "common/context.h"
 #include "core/Infiniband.h"
-class RDMAClient {
+class RDMAPingPongClient {
    public:
-    RDMAClient();
-    int Init();
+    RDMAPingPongClient(std::string& configFileName);
+    void Init();
+    ConnectedSocket* Connect(const char* serverIPAddr, const char* serverPort);
+    void Send(uint32_t iterations);
 
    private:
-    Context cct;
+    static const uint32_t kRequestSize = 32767 * 1024;
+    static const uint32_t kNumRequest = 8;
+
+    RDMAStack* get_rdma_stack() { return reinterpret_cast<RDMAStack*>(rdma_stack.get()); }
+    int GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size);
+    RDMAConfig* rdma_config;
+    Context* context;
+    std::shared_ptr<NetworkStack> rdma_stack;
+    ConnectedSocket connected_socket;
 };
 
-int main(int argc, char** argv) {
-    RDMAConfig* config = new RDMAConfig(std::string(argv[1]));
-    config->m_op_threads_num_ = 1;
-    Context* cct = new Context(config);
-    std::shared_ptr<NetworkStack> networkStack = NetworkStack::create(cct, "rdma");
+RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName) {
+    rdma_config = new RDMAConfig(configFileName);
+    rdma_config->m_op_threads_num_ = 1;
+    context = new Context(rdma_config);
+    rdma_stack = NetworkStack::create(context, "rdma");
+}
 
-    networkStack->start();
+void RDMAPingPongClient::Init() { rdma_stack->start(); }
 
-    // for (int i = 0; i < networkStack->get_num_worker(); i++) {
+ConnectedSocket* RDMAPingPongClient::Connect(const char* serverIPAddr, const char* serverPort) {
     // use the first worker to connect
-    Worker* worker = networkStack->get_worker(0);
+    Worker* worker = rdma_stack->get_worker(0);
 
     entity_addr_t server_addr(entity_addr_t::type_t::TYPE_SERVER, 0);  // nonce = 0
     server_addr.set_family(AF_INET);
     // sockaddr sa;
     sockaddr_in server_sock_addr;
-    inet_pton(AF_INET, config->m_ipAddr.c_str(), &server_sock_addr.sin_addr);
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(atoi(argv[3]));
+    inet_pton(AF_INET, serverIPAddr, &server_sock_addr.sin_addr);
+    server_sock_addr.sin_family = AF_INET;
+    server_sock_addr.sin_port = htons(atoi(serverPort));
     // sa.sin_zero = ;
     server_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&server_sock_addr));
 
     entity_addr_t client_addr(entity_addr_t::type_t::TYPE_SERVER, 0);  // nonce = 0
     client_addr.set_family(AF_INET);
     // sockaddr sa;
-    sockaddr_in ca;
-    inet_pton(AF_INET, config->m_ipAddr.c_str(), &sa.sin_addr);
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons(atoi(argv[3]));
+    sockaddr_in client_socket_addr;
+    inet_pton(AF_INET, rdma_config->m_ipAddr.c_str(), &client_socket_addr.sin_addr);
+    client_socket_addr.sin_family = AF_INET;
+    client_socket_addr.sin_port = htons(atoi(serverPort));
     // sa.sin_zero = ;
-    server_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&sa));
+    server_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&client_socket_addr));
 
     SocketOptions opts;
     {
@@ -61,15 +73,45 @@ int main(int argc, char** argv) {
     std::cout << "SERVER:: listening on the addr" << server_addr << std::endl;
     int error;
 
-    ConnectedSocket cs;
-    if (error = worker->connect(server_addr, opts, &cs)) {
+    if (error = worker->connect(server_addr, opts, &connected_socket)) {
         std::cout << "worker cannot connect addr" << server_addr << cpp_strerror(error) << std::endl;
         return;
     };
-    reinterpret_cast<RDMAWorker*>(worker)->ib->;
-    BufferList bl();
-    Buffer buffer;
+    return &connected_socket;
+}
 
-    buffer.buffer.bl.Append(buffer);
-    cs.send(, );
+int RDMAPingPongClient::GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size) {
+    Infiniband::MemoryManager* memoryManager = get_rdma_stack()->get_infiniband_entity()->get_memory_manager();
+    memoryManager->get_send_buffers(buffers, size);
+    return 0;
+}
+
+void RDMAPingPongClient::Send(uint32_t iterations) {
+    const char* prefix = "this is the test of iteration";
+    int size_prefix = strlen(prefix);
+
+    int i = 0;
+    while (i < iterations) {
+        std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+        GetBuffers(buffers, RDMAPingPongClient::kRequestSize * RDMAPingPongClient::kNumRequest);
+        kassert(buffers.size() == RDMAPingPongClient::kNumRequest);
+        BufferList bl;
+        for (auto& chunk : buffers) {
+            memcpy(reinterpret_cast<void*>(chunk->buffer), reinterpret_cast<void*>(const_cast<char*>(prefix)), size_prefix);
+            *(chunk->buffer + size_prefix) = i;
+            i++;
+            bl.Append(Buffer(chunk));
+        }
+
+        connected_socket.send(bl, false);
+    }
+}
+
+int main(int argc, char** argv) {
+    std::string configFileName(argv[1]);
+    RDMAPingPongClient rdmaClient(configFileName);
+    rdmaClient.Init();
+    rdmaClient.Connect(argv[2], argv[3]);
+    rdmaClient.Send(1000000);
+    return;
 }

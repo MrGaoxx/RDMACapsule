@@ -225,6 +225,8 @@ class Infiniband {
             void clear_qp() { set_qp(nullptr); }
             QueuePair *get_qp() { return qp; }
 
+            char *GetCurrentPointer() {}
+
            public:
             ibv_mr *mr;
             QueuePair *qp;
@@ -334,16 +336,13 @@ class Infiniband {
         MemoryManager(Context *c, Device *d, ProtectionDomain *p);
         ~MemoryManager();
 
-        void *malloc(size_t size);
-        void free(void *ptr);
-
         void create_tx_pool(uint32_t size, uint32_t tx_num);
         void return_tx(std::vector<Chunk *> &chunks);
         int get_send_buffers(std::vector<Chunk *> &c, size_t bytes);
-        bool is_tx_buffer(const char *c) { return send->is_my_buffer(c); }
-        bool is_valid_chunk(const Chunk *c) { return send->is_valid_chunk(c); }
-        Chunk *get_tx_chunk_by_buffer(const char *c) { return send->get_chunk_by_buffer(c); }
-        uint32_t get_tx_buffer_size() const { return send->buffer_size; }
+        bool is_tx_buffer(const char *c) { return send_buffers->is_my_buffer(c); }
+        bool is_valid_chunk(const Chunk *c) { return send_buffers->is_valid_chunk(c); }
+        Chunk *get_tx_chunk_by_buffer(const char *c) { return send_buffers->get_chunk_by_buffer(c); }
+        uint32_t get_tx_buffer_size() const { return send_buffers->buffer_size; }
 
         Chunk *get_rx_buffer() {
             std::lock_guard<std::mutex> l{rxbuf_pool.lock};
@@ -364,7 +363,7 @@ class Infiniband {
         // TODO: Cluster -> TxPool txbuf_pool
         // chunk layout fix
         //
-        Cluster *send = nullptr;  // SEND
+        Cluster *send_buffers = nullptr;  // SEND
         Device *device;
         ProtectionDomain *pd;
         MemPoolContext rxbuf_pool_ctx;
@@ -372,6 +371,8 @@ class Infiniband {
 
         void *huge_pages_malloc(size_t size);
         void huge_pages_free(void *ptr);
+        void *malloc(size_t size);
+        void free(void *ptr);
     };
 
    private:

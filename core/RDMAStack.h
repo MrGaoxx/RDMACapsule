@@ -258,7 +258,7 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 class RDMAStack : public NetworkStack {
     std::vector<std::thread> threads;
     PerfCounters *perf_counter;
-    std::shared_ptr<Infiniband> ib;
+    std::shared_ptr<Infiniband> infiniband_entity;
     std::shared_ptr<RDMADispatcher> rdma_dispatcher;
 
     std::atomic<bool> fork_finished = {false};
@@ -275,6 +275,7 @@ class RDMAStack : public NetworkStack {
     virtual void join_worker(unsigned i) override;
     virtual bool is_ready() override { return fork_finished.load(); };
     virtual void ready() override { fork_finished = true; };
+    Infiniband *get_infiniband_entity() { return infiniband_entity.get(); };
 };
 
 #endif

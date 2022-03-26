@@ -1,6 +1,8 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <asm/errno.h>
+
 #include <atomic>
 #include <iostream>
 
@@ -28,6 +30,9 @@ std::string cpp_strerror(int err) {
 
     return oss.str();
 }
+
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 namespace common {
 

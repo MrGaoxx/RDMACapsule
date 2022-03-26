@@ -4,20 +4,29 @@
 #include <list>
 //#include <vector>
 #include "common/common.h"
+
+namespace Infiniband::MemoryManager {
+class Chunk;
+}
 class Buffer {
    public:
     explicit Buffer() : start(nullptr), cur(nullptr), len(0){};
-    explicit Buffer(uint32_t size) : start(malloc(sizeof(size))), cur(start), len(size){};
+    explicit Buffer(uint32_t size) : start(malloc(sizeof(size))), cur(start), len(size), is_malloc(true){};
     explicit Buffer(const Buffer& buffer) : start(buffer.start), cur(buffer.cur), len(buffer.len){};
     explicit Buffer(const Buffer&& buffer) : start(buffer.start), cur(buffer.cur), len(buffer.len){};
-    ~Buffer() { free(start); }
+    explicit Buffer(Infiniband::MemoryManager::Chunk* chunk);
+    ~Buffer() {
+        if (is_malloc) {
+            free(start);
+        }
+    }
     Buffer& operator=(const Buffer& buffer) {
         start = buffer.start;
         cur = buffer.cur;
         len = buffer.len;
     }
     uint32_t get_len() { return len; }
-    uint32_t GetRemainingLen() const { return static_cast<uint32_t>(len + start - cur); }
+    uint32_t GetRemainingLen() const { return static_cast<uint32_t>(len - (cur - start)); }
     void* get_buffer() { return cur; }
     void* get_raw_buffer() { return start; }
     uint32_t Move(uint32_t size) {
@@ -30,6 +39,7 @@ class Buffer {
     void* start;
     void* cur;
     uint32_t len;
+    bool is_malloc = false;
 };
 
 class BufferList {

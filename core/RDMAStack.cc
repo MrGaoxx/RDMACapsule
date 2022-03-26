@@ -701,7 +701,9 @@ void RDMAWorker::handle_pending_message() {
 }
 
 RDMAStack::RDMAStack(Context *context)
-    : NetworkStack(context), ib(std::make_shared<Infiniband>(context)), rdma_dispatcher(std::make_shared<RDMADispatcher>(context, ib)) {
+    : NetworkStack(context),
+      infiniband_entity(std::make_shared<Infiniband>(context)),
+      rdma_dispatcher(std::make_shared<RDMADispatcher>(context, infiniband_entity)) {
     std::cout << __func__ << " constructing RDMAStack..." << std::endl;
     std::cout << " creating RDMAStack:" << this << " with dispatcher:" << rdma_dispatcher.get() << std::endl;
 }
@@ -715,7 +717,7 @@ RDMAStack::~RDMAStack() {
 Worker *RDMAStack::create_worker(Context *c, unsigned worker_id) {
     auto w = new RDMAWorker(c, worker_id);
     w->set_dispatcher(rdma_dispatcher);
-    w->set_ib(ib);
+    w->set_ib(infiniband_entity);
     return w;
 }
 
