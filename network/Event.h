@@ -33,6 +33,7 @@
 #define EVENT_READABLE 1
 #define EVENT_WRITABLE 2
 
+class Context;
 class EventCenter;
 
 class EventCallback {
@@ -55,7 +56,7 @@ struct FiredFileEvent {
  */
 class EventDriver {
    public:
-    virtual ~EventDriver() {}  // we want a virtual destructor!!!
+    virtual ~EventDriver() {}
     virtual int init(EventCenter *center, int nevent) = 0;
     virtual int add_event(int fd, int cur_mask, int mask) = 0;
     virtual int del_event(int fd, int cur_mask, int del_mask) = 0;

@@ -22,6 +22,8 @@
 
 #include "EventEpoll.h"
 #include "common/common.h"
+#include "common/context.h"
+#include "network/net_handler.h"
 
 int pipe_cloexec(int pipefd[2], int flags) {
     if (pipe(pipefd) == -1) return -1;

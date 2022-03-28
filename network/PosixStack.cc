@@ -26,6 +26,7 @@
 #include <algorithm>
 
 #include "common/buffer.h"
+#include "network/net_handler.h"
 
 constexpr uint32_t kPosixIOVMax = 1024;
 class PosixConnectedSocketImpl final : public ConnectedSocketImpl {

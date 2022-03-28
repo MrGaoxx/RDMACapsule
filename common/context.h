@@ -32,18 +32,26 @@ struct RDMAConfig {
     uint8_t m_gid_index_ = 3;
     uint8_t m_rdma_dscp_ = 0;
     uint8_t m_rdma_sl_ = 0;
-    uint8_t m_rdma_port_num_ = 0;
+    uint8_t m_rdma_port_num_ = 1;
 
-    uint32_t m_rdma_buffer_size_bytes_ = 32768;
+    uint32_t m_rdma_buffer_size_bytes_ = 32 * 1024;
     uint32_t m_rdma_send_queeu_len_ = 128;
-    uint32_t m_rdma_receive_buffers_bytes_ = 65536;
+    uint32_t m_rdma_receive_buffers_bytes_ = 64 * 1024;
     uint32_t m_rdma_receive_queue_len_ = 128;
     uint32_t m_rdma_polling_us_ = 1;
 
+    uint8_t m_bind_retry_count_ = 1 << 3;
+    uint32_t m_bind_retry_delay_seconds_ = 1;  // seconds
+    uint16_t m_bind_port_min_;
+    uint16_t m_bind_port_max_;
+
     bool m_tcp_nodelay_ = true;
+    uint8_t m_tcp_priority_ = 0;
+    uint32_t m_tcp_rcvbuf_ = 64 * 1024;
     uint32_t m_tcp_listen_backlog_ = 128;
     bool m_bind_before_connect_ = true;
-    uint32_t m_tcp_rcvbuf_bytes_ = 65536;
+    uint32_t m_tcp_rcvbuf_bytes_ = 64 * 1024;
+    uint8_t m_max_accept_failures_ = 64;
 
     uint16_t m_op_threads_num_ = 32;
     std::string m_ipAddr;
@@ -54,7 +62,7 @@ struct RDMAConfig {
     void parse(std::string& key, std::string& val);
 };
 
-RDMAConfig::RDMAConfig(std::string& filename) {
+inline RDMAConfig::RDMAConfig(std::string& filename) {
     std::fstream configFile;
     configFile.open(filename, std::ios_base::app | std::ios_base::in);
     if (!configFile.is_open()) {
@@ -64,30 +72,41 @@ RDMAConfig::RDMAConfig(std::string& filename) {
 
     std::string key, val;
     while (!configFile.eof()) {
-        std::cin >> key >> val;
+        configFile >> key >> val;
         parse(key, val);
     }
     configFile.close();
 }
 
 inline void RDMAConfig::parse(std::string& key, std::string& val) {
-    if (key.compare("RDMA_CM")) {
-        if (val.compare("true")) {
+    if (key == "RDMA_CM") {
+        if (val == "true") {
             m_use_rdma_cm_ = true;
+        } else {
+            m_use_rdma_cm_ = false;
         }
-    } else if (key.compare("RDMA_ENABLE_HUGE_PAGE")) {
-        if (val.compare("true")) {
+        std::cout << " use_rdma_cm = " << m_use_rdma_cm_ << std::endl;
+    } else if (key == "RDMA_ENABLE_HUGE_PAGE") {
+        if (val == "true") {
             m_rdma_enable_hugepage_ = true;
+        } else {
+            m_rdma_enable_hugepage_ = false;
         }
-    } else if (key.compare("RDMA_SURRPORT_SRQ")) {
-        if (val.compare("true")) {
+        std::cout << " rdma_enable_hugepage = " << m_rdma_enable_hugepage_ << std::endl;
+    } else if (key == "RDMA_SURRPORT_SRQ") {
+        if (val == "true") {
             m_rdma_support_srq_ = true;
+        } else {
+            m_rdma_support_srq_ = false;
         }
+        std::cout << " rdma_enable_hugepage = " << m_rdma_enable_hugepage_ << std::endl;
     }  // TO DO: finish all other configurations
-    else if (key.compare("IP")) {
+    else if (key == "IP") {
         m_ipAddr = val;
-    } else if (key.compare("RDMA_DEVICE_NAME")) {
+        std::cout << " ipAddr = " << m_ipAddr << std::endl;
+    } else if (key == "RDMA_DEVICE_NAME") {
         m_rdma_device_name_ = val;
+        std::cout << " rdma_device_name = " << m_rdma_device_name_ << std::endl;
     }
     return;
 }

@@ -156,7 +156,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t &peer_addr, const S
 int RDMAConnectedSocketImpl::handle_connection_established(bool need_set_fault) {
     std::cout << __func__ << " start " << std::endl;
     // delete read event
-    worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
+    // worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
     if (1 == connected) {
         std::cout << __func__ << " warnning: logic failed " << std::endl;
         if (need_set_fault) {

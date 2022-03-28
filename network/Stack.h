@@ -188,7 +188,7 @@ class Worker {
     bool done = false;
 
     Context *context;
-    PerfCounters *perf_logger;
+    common::PerfCounter::PerfCounters *perf_logger;
     unsigned id;
 
     std::atomic_uint references;
@@ -205,8 +205,10 @@ class Worker {
 
         plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
         plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-        plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
-        plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
+        plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0,
+                            static_cast<int>(common::PerfCounter::unit_t::UNIT_BYTES));
+        plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0,
+                            static_cast<int>(common::PerfCounter::unit_t::UNIT_BYTES));
         plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
         plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
 
@@ -233,7 +235,7 @@ class Worker {
     virtual void destroy() {}
 
     virtual void initialize() {}
-    PerfCounters *get_perf_counter() { return perf_logger; }
+    common::PerfCounter::PerfCounters *get_perf_counter() { return perf_logger; }
     void release_worker() {
         int oldref = references.fetch_sub(1);
         kassert(oldref > 0);

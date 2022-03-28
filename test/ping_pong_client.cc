@@ -15,7 +15,7 @@ class RDMAPingPongClient {
     void Send(uint32_t iterations);
 
    private:
-    static const uint32_t kRequestSize = 32767 * 1024;
+    static const uint32_t kRequestSize = 32 * 1024;
     static const uint32_t kNumRequest = 8;
 
     RDMAStack* get_rdma_stack() { return reinterpret_cast<RDMAStack*>(rdma_stack.get()); }
@@ -63,14 +63,14 @@ ConnectedSocket* RDMAPingPongClient::Connect(const char* serverIPAddr, const cha
     {
         opts.connect_bind_addr = server_addr;
         opts.nodelay = true;
-        opts.nonblock = true;
+        opts.nonblock = false;
         opts.priority = IPTOS_CLASS_CS3;
         opts.rcbuf_size = 32 * 1024;
     }
 
     ServerSocket* sock;
 
-    std::cout << "SERVER:: listening on the addr" << server_addr << std::endl;
+    std::cout << "Client:: connecting addr" << server_addr << std::endl;
     int error;
 
     if (error = worker->connect(server_addr, opts, &connected_socket)) {
@@ -107,7 +107,7 @@ void RDMAPingPongClient::Send(uint32_t iterations) {
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
     std::string configFileName(argv[1]);
     RDMAPingPongClient rdmaClient(configFileName);
     rdmaClient.Init();

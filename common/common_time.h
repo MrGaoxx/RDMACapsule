@@ -752,8 +752,6 @@ class Cycles {
     static __inline __attribute__((always_inline)) double get_cycles_per_sec() { return cycles_per_sec; }
 };
 
-double Cycles::cycles_per_sec = 0;
-
 /**
  * Perform once-only overall initialization for the Cycles class, such
  * as calibrating the clock frequency.  This method must be called
@@ -826,7 +824,7 @@ inline double Cycles::per_second() { return get_cycles_per_sec(); }
  * \return
  *      The time in seconds corresponding to cycles.
  */
-double Cycles::to_seconds(uint64_t cycles, double cycles_per_sec) {
+inline double Cycles::to_seconds(uint64_t cycles, double cycles_per_sec) {
     if (cycles_per_sec == 0) cycles_per_sec = get_cycles_per_sec();
     return static_cast<double>(cycles) / cycles_per_sec;
 }

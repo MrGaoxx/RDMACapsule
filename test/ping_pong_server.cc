@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <ifaddrs.h>
+#include <linux/errno.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 
@@ -13,12 +14,12 @@ class RDMAPingPongServer {
     ~RDMAPingPongServer();
     void Init();
     int Listen(const char* serverPort);
-    ConnectedSocket* Accept();
+    void Accept();
     void Poll();
 
     RDMAStack* get_rdma_stack() { return reinterpret_cast<RDMAStack*>(rdma_stack.get()); }
     ConnectedSocket* get_connected_socket() { return &connected_socket; }
-    static const uint32_t kRequestSize = 32767 * 1024;
+    static const uint32_t kRequestSize = 32 * 1024;
     static const uint32_t kNumRequest = 8;
     char recv_buffer[kRequestSize][kNumRequest];
     uint8_t pos;
@@ -40,6 +41,7 @@ RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName) : is_listeni
     rdma_config->m_op_threads_num_ = 1;
     context = new Context(rdma_config);
     rdma_stack = NetworkStack::create(context, "rdma");
+    server_sock = new ServerSocket();
     // recv_buffer = reinterpret_cast<char*>(malloc(kRequestSize * kNumRequest));
 }
 RDMAPingPongServer::~RDMAPingPongServer() {
@@ -72,11 +74,22 @@ int RDMAPingPongServer::Listen(const char* serverPort) {
     is_listening = ~error;
     return error;
 }
-ConnectedSocket* RDMAPingPongServer::Accept() { server_sock->accept(&connected_socket, server_sockopts, &client_addr, rdma_stack->get_worker(0)); };
+void RDMAPingPongServer::Accept() {
+    int rs = 0;
+    do {
+        rs = server_sock->accept(&connected_socket, server_sockopts, &client_addr, rdma_stack->get_worker(0));
+        if (unlikely(rs && rs != -11)) {
+            std::cout << " accept socket failed, errno is " << rs << std::endl;
+            abort();
+        }
+    } while (rs != 0);
+    std::cout << "==========> accept socket successful " << std::endl;
+    return;
+};
 void RDMAPingPongServer::Poll() {
     while (true) {
         int rs = connected_socket.read(recv_buffer[pos], kRequestSize);
-        if (rs != 0) {
+        if (unlikely(rs != -EAGAIN)) {
             if (unlikely(rs != kRequestSize)) {
                 std::cout << "!!! read the recv buffer of size:[" << rs << "] expected:[" << kRequestSize << "]" << std::endl;
             }
@@ -90,16 +103,20 @@ void RDMAPingPongServer::Poll() {
     }
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char* argv[]) {
+    std::cout << "The filename of configuration file is: " << std::string(argv[1]) << std::endl;
+    std::cout << "The listening port is: " << atoi(argv[2]) << std::endl;
     std::string configFileName(argv[1]);
     RDMAPingPongServer server(configFileName);
     server.Init();
     int error = server.Listen(argv[2]);
     if (unlikely(error)) {
         std::cout << "worker cannot listen socket on addr" << cpp_strerror(error) << std::endl;
-        return;
+        return 1;
+    } else {
+        std::cout << "==========> listening socket succeeded" << std::endl;
     };
     server.Accept();
-    server.Poll();
-    return;
+    // server.Poll();
+    return 0;
 }

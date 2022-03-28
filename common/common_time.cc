@@ -18,6 +18,7 @@
 #include <chrono>
 #include <map>
 
+double Cycles::cycles_per_sec = 0.0;
 namespace common {
 using std::chrono::nanoseconds;
 using std::chrono::seconds;

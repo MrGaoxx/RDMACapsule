@@ -18,17 +18,17 @@
 #define CEPH_MSG_EVENTSELECT_H
 
 #include "Event.h"
-
+class Context;
 class SelectDriver : public EventDriver {
     fd_set rfds, wfds;
     /* We need to have a copy of the fd sets as it's not safe to reuse
      * FD sets after select(). */
     fd_set _rfds, _wfds;
     int max_fd;
-    Configure *config;
+    Context *config;
 
    public:
-    explicit SelectDriver(Configure *c) : max_fd(0), config(c) {}
+    explicit SelectDriver(Context *c) : max_fd(0), config(c) {}
     ~SelectDriver() override {}
 
     int init(EventCenter *c, int nevent) override;

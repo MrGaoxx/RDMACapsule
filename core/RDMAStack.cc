@@ -82,7 +82,7 @@ void RDMADispatcher::polling_start() {
     kassert(rx_cq);
 
     t = std::thread(&RDMADispatcher::polling, this);
-    // ceph_pthread_setname(t.native_handle(), "rdma-polling");
+    pthread_setname(t.native_handle(), "rdma-polling");
 }
 
 void RDMADispatcher::polling_stop() {
@@ -611,9 +611,11 @@ RDMAWorker::RDMAWorker(Context *c, unsigned worker_id) : Worker(c, worker_id), t
     plb.add_u64_counter(l_msgr_rdma_tx_failed, "tx_failed_post", "The number of tx failed posted");
 
     plb.add_u64_counter(l_msgr_rdma_tx_chunks, "tx_chunks", "The number of tx chunks transmitted");
-    plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_rdma_tx_bytes, "tx_bytes", "The bytes of tx chunks transmitted", NULL, 0,
+                        static_cast<int>(common::PerfCounter::unit_t::UNIT_BYTES));
     plb.add_u64_counter(l_msgr_rdma_rx_chunks, "rx_chunks", "The number of rx chunks transmitted");
-    plb.add_u64_counter(l_msgr_rdma_rx_bytes, "rx_bytes", "The bytes of rx chunks transmitted", NULL, 0, static_cast<int>(unit_t::UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_rdma_rx_bytes, "rx_bytes", "The bytes of rx chunks transmitted", NULL, 0,
+                        static_cast<int>(common::PerfCounter::unit_t::UNIT_BYTES));
     plb.add_u64_counter(l_msgr_rdma_pending_sent_conns, "pending_sent_conns", "The count of pending sent conns");
 
     perf_logger = plb.create_perf_counters();

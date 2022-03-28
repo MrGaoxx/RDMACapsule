@@ -18,7 +18,7 @@
         std::cout << "assert failed " << #x << std::endl; \
         abort();                                          \
     }
-std::string cpp_strerror(int err) {
+inline std::string cpp_strerror(int err) {
     char buf[128];
     char* errmsg;
 

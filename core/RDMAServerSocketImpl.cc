@@ -65,7 +65,7 @@ err:
 }
 
 int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
-    std::cout << __func__ << std::endl;
+    // std::cout << __func__ << std::endl;
 
     kassert(sock);
 

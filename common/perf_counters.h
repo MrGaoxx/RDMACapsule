@@ -34,7 +34,6 @@ struct Context;
 namespace common::PerfCounter {
 class PerfCountersBuilder;
 class PerfCounters;
-}  // namespace common::PerfCounter
 
 enum perfcounter_type_d : uint8_t {
     PERFCOUNTER_NONE = 0,
@@ -55,7 +54,6 @@ enum class unit_t : uint8_t { UNIT_BYTES, UNIT_NONE };
  * In the future, we will probably get rid of the first/last arguments, since
  * PerfCountersBuilder can deduce them itself.
  */
-namespace common::PerfCounter {
 class PerfCountersBuilder {
    public:
     PerfCountersBuilder(Context *context, const std::string &name, int first, int last);
