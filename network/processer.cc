@@ -35,42 +35,27 @@ int Processor::bind(const entity_addr_t& bind_addr, entity_addr_t* bound_addr) {
             sleep(context->m_rdma_config_->m_bind_retry_delay_seconds_);
         }
 
-        if (listen_addr.get_port()) {
-            worker->center.submit_to(
-                worker->center.get_id(), [this, &listen_addr, &opts, &r]() { r = worker->listen(listen_addr, opts, &listen_socket); }, false);
-            if (r < 0) {
-                std::cout << __func__ << " unable to bind to " << listen_addr << ": " << cpp_strerror(r) << std::endl;
-                continue;
-            }
-        } else {
-            // try a range of ports
-            for (int port = context->m_rdma_config_->m_bind_port_min_; port <= context->m_rdma_config_->m_bind_port_max_; port++) {
-                listen_addr.set_port(port);
-                worker->center.submit_to(
-                    worker->center.get_id(), [this, &listen_addr, &opts, &r]() { r = worker->listen(listen_addr, opts, &listen_socket); }, false);
-                if (r == 0) break;
-            }
-            if (r < 0) {
-                std::cout << __func__ << " unable to bind to " << listen_addr << " on any port in range " << context->m_rdma_config_->m_bind_port_min_
-                          << "-" << context->m_rdma_config_->m_bind_port_max_ << ": " << cpp_strerror(r) << std::endl;
-                listen_addr.set_port(0);  // Clear port before retry, otherwise we shall fail again.
-                continue;
-            }
-            std::cout << __func__ << " bound on random port " << listen_addr << std::endl;
+        if (!listen_addr.get_port()) {
+            listen_addr.set_port(context->m_rdma_config_->m_listen_port);
+        }
+        worker->center.submit_to(
+            worker->center.get_id(), [this, &listen_addr, &opts, &r]() { r = worker->listen(listen_addr, opts, &listen_socket); }, false);
+        if (r < 0) {
+            std::cout << __func__ << " unable to bind to " << listen_addr << ": " << cpp_strerror(r) << std::endl;
+            continue;
         }
         if (r == 0) {
             break;
         }
+    }
+    // It seems that binding completely failed, return with that exit status
+    if (r < 0) {
+        std::cout << __func__ << " was unable to bind after " << context->m_rdma_config_->m_bind_retry_count_ << " attempts: " << cpp_strerror(r)
+                  << std::endl;
+        // clean up previous bind
+        listen_socket.abort_accept();
 
-        // It seems that binding completely failed, return with that exit status
-        if (r < 0) {
-            std::cout << __func__ << " was unable to bind after " << context->m_rdma_config_->m_bind_retry_count_ << " attempts: " << cpp_strerror(r)
-                      << std::endl;
-            // clean up previous bind
-            listen_socket.abort_accept();
-
-            return r;
-        }
+        return r;
     }
 
     std::cout << __func__ << " bound to " << *bound_addr << std::endl;
@@ -113,7 +98,7 @@ void Processor::accept() {
         int r = listen_socket.accept(&cli_socket, opts, &addr, w);
         if (r == 0) {
             std::cout << __func__ << " accepted incoming on sd " << cli_socket.fd() << std::endl;
-            server->accept(w, std::move(cli_socket), listen_socket, addr);
+            server->accept(w, std::move(cli_socket), listen_socket.get_addr(), addr);
             accept_error_num = 0;
             continue;
         } else {

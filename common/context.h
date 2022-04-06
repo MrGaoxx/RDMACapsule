@@ -1,6 +1,11 @@
 #ifndef COMMON_CONTEXT
 #define COMMON_CONTEXT
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <linux/errno.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -9,8 +14,8 @@
 #include <string>
 
 #include "common/perf_counters_collection.h"
+#include "common/types.h"
 #include "network/Event.h"
-
 namespace common::PerfCounter {
 class PerfCountersCollection;
 }
@@ -27,7 +32,7 @@ struct RDMAConfig {
     bool m_use_rdma_cm_ = false;
     bool m_rdma_enable_hugepage_ = false;
     bool m_rdma_support_srq_ = false;
-    std::string m_rdma_device_name_;
+    std::string m_rdma_device_name_ = "mlx_5";
 
     uint8_t m_gid_index_ = 3;
     uint8_t m_rdma_dscp_ = 0;
@@ -42,8 +47,6 @@ struct RDMAConfig {
 
     uint8_t m_bind_retry_count_ = 1 << 3;
     uint32_t m_bind_retry_delay_seconds_ = 1;  // seconds
-    uint16_t m_bind_port_min_;
-    uint16_t m_bind_port_max_;
 
     bool m_tcp_nodelay_ = true;
     uint8_t m_tcp_priority_ = 0;
@@ -53,8 +56,10 @@ struct RDMAConfig {
     uint32_t m_tcp_rcvbuf_bytes_ = 64 * 1024;
     uint8_t m_max_accept_failures_ = 64;
 
-    uint16_t m_op_threads_num_ = 32;
-    std::string m_ipAddr;
+    uint16_t m_op_threads_num_ = 1;
+    std::string m_ip_addr;
+    uint16_t m_listen_port;
+    entity_addr_t m_addr;
 #ifdef HAVE_MULTICAST
     MulticastManagementConnectGroup*;
 #endif
@@ -102,8 +107,20 @@ inline void RDMAConfig::parse(std::string& key, std::string& val) {
         std::cout << " rdma_enable_hugepage = " << m_rdma_enable_hugepage_ << std::endl;
     }  // TO DO: finish all other configurations
     else if (key == "IP") {
-        m_ipAddr = val;
-        std::cout << " ipAddr = " << m_ipAddr << std::endl;
+        m_ip_addr = val;
+
+        m_addr.nonce = 0;
+        m_addr.set_family(AF_INET);
+        sockaddr_in* sa = new sockaddr_in;
+        inet_pton(AF_INET, m_ip_addr.c_str(), &sa->sin_addr);
+        sa->sin_family = AF_INET;
+        sa->sin_port = m_addr.u.sin.sin_port;
+        m_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(sa));
+
+        std::cout << " ip_addr = " << m_ip_addr << std::endl;
+    } else if (key == "LISTEN_PORT") {
+        m_addr.u.sin.sin_port = static_cast<uint16_t>(std::stoi(val));
+        std::cout << " listen_port = " << m_listen_port << std::endl;
     } else if (key == "RDMA_DEVICE_NAME") {
         m_rdma_device_name_ = val;
         std::cout << " rdma_device_name = " << m_rdma_device_name_ << std::endl;

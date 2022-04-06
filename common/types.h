@@ -181,6 +181,16 @@ struct entity_addr_t {
 
     std::string ip_only_to_str() const;
 };
+
+namespace std {
+template <>
+struct hash<entity_addr_t> {
+    size_t operator()(const entity_addr_t& x) const {
+        return (static_cast<size_t>(x.in4_addr().sin_addr.s_addr) << 16) + static_cast<size_t>(x.get_port());
+    }
+};
+}  // namespace std
+
 std::ostream& operator<<(std::ostream& out, const entity_addr_t& addr);
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }

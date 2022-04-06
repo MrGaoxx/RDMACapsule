@@ -19,10 +19,15 @@ class Connection {
 
     entity_addr_t get_peer_socket_addr() const { return peer_addr; }
 
+    ssize_t Send(BufferList bl) {
+        kassert(center->in_thread());
+        return cs.send(bl, false);
+    }
+    ssize_t Read(char *buf, size_t n) { return cs.read(buf, n); }
+
    private:
     enum { STATE_NONE, STATE_CONNECTING, STATE_CONNECTING_RE, STATE_ACCEPTING, STATE_CONNECTION_ESTABLISHED, STATE_CLOSED };
-
-    static const uint32_t TCP_PREFETCH_MIN_SIZE;
+    int state;
     static const char *get_state_name(int state) {
         const char *const statenames[] = {"STATE_NONE",  "STATE_CONNECTING", "STATE_CONNECTING_RE", "STATE_ACCEPTING", "STATE_CONNECTION_ESTABLISHED",
                                           "STATE_CLOSED"};
@@ -38,11 +43,27 @@ class Connection {
     void tick(uint64_t id);
     void stop(bool queue_reset);
     void cleanup();
+    const entity_addr_t &get_local_addr() const { return local_addr; }
 
    private:
     NetworkStack *stack;
     Context *context;
-    Worker *localWorker;
+
+    std::mutex lock;
+    std::mutex write_lock;
+
+    Worker *worker;
+    EventCenter *center;
+
+    EventCallbackRef read_handler;
+    EventCallbackRef write_handler;
+    EventCallbackRef write_callback_handler;
+
+    // std::optional<std::function<void(ssize_t)>> writeCallback;
+
+    ConnectedSocket cs;
+    entity_addr_t local_addr;
     entity_addr_t peer_addr;
+    Server *server;
 };
 #endif

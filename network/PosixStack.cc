@@ -144,7 +144,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
     int _fd;
 
    public:
-    explicit PosixServerSocketImpl(int f, const entity_addr_t &listen_addr) : ServerSocketImpl(listen_addr.get_type()), _fd(f) {}
+    explicit PosixServerSocketImpl(int f, const entity_addr_t &listen_addr) : ServerSocketImpl(listen_addr), _fd(f) {}
     int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     void abort_accept() override {
         ::close(_fd);
@@ -176,7 +176,7 @@ int PosixServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &op
 
     kassert(NULL != out);  // out should not be NULL in accept connection
 
-    out->set_type(addr_type);
+    out->set_type(addr.type);
     out->set_sockaddr((sockaddr *)&ss);
     Network::NetHandler::set_priority(sd, opt.priority, out->get_family());
 

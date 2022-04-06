@@ -47,8 +47,8 @@ struct SocketOptions {
 /// \cond internal
 class ServerSocketImpl {
    public:
-    entity_addr_t::type_t addr_type;  ///< entity_addr_t::TYPE_*
-    ServerSocketImpl(entity_addr_t::type_t type) : addr_type(type) {}
+    entity_addr_t addr;
+    ServerSocketImpl(const entity_addr_t &addr_) : addr(addr_) {}
     virtual ~ServerSocketImpl() {}
     virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) = 0;
     virtual void abort_accept() = 0;
@@ -152,6 +152,8 @@ class ServerSocket {
 
     /// Get file descriptor
     int fd() const { return _ssi->fd(); }
+
+    entity_addr_t get_addr() { return _ssi->addr; }
 
     explicit operator bool() const { return _ssi.get(); }
 };

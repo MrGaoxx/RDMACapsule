@@ -19,7 +19,7 @@
 
 RDMAServerSocketImpl::RDMAServerSocketImpl(Context *context, std::shared_ptr<Infiniband> &ib, std::shared_ptr<RDMADispatcher> &rdma_dispatcher,
                                            RDMAWorker *w, entity_addr_t &a)
-    : ServerSocketImpl(a.get_type()), context(context), server_setup_socket(-1), ib(ib), dispatcher(rdma_dispatcher), worker(w), sa(a) {}
+    : ServerSocketImpl(a), context(context), server_setup_socket(-1), ib(ib), dispatcher(rdma_dispatcher), worker(w), sa(a) {}
 
 int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt) {
     int rc = 0;
@@ -90,7 +90,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 
     kassert(NULL != out);  // out should not be NULL in accept connection
 
-    out->set_type(addr_type);
+    out->set_type(addr.type);
     out->set_sockaddr((sockaddr *)&ss);
     Network::NetHandler::set_priority(sd, opt.priority, out->get_family());
 

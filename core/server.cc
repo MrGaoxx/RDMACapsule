@@ -1,10 +1,14 @@
 #include "core/server.h"
 
-Server::Server(Context *c) : context(c), accepting_conns(), conns() {
+Server::Server(Context *c) : context(c), accepting_conns() {
     stack = NetworkStack::create(context, "rdma");
     unsigned processor_num = 1;
     processor_num = stack->get_num_worker();
     for (unsigned i = 0; i < processor_num; ++i) processors.push_back(new Processor(this, stack->get_worker(i), c, stack.get()));
+}
+
+void Server::start() {
+    for (auto &&p : processors) p->start();
 }
 
 int Server::bind(const entity_addr_t &bind_addr) {
