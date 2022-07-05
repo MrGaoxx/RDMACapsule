@@ -45,6 +45,9 @@ class Connection {
     void cleanup();
     const entity_addr_t &get_local_addr() const { return local_addr; }
 
+    std::function<void(void)> *read_callback;
+    std::function<void(void)> *write_callback;
+
    private:
     NetworkStack *stack;
     Context *context;
@@ -58,8 +61,9 @@ class Connection {
     EventCallbackRef read_handler;
     EventCallbackRef write_handler;
     EventCallbackRef write_callback_handler;
-
-    // std::optional<std::function<void(ssize_t)>> writeCallback;
+    EventCallbackRef read_callback_handler;
+    // EventCallbackRef read_data_handler;
+    //  std::optional<std::function<void(ssize_t)>> writeCallback;
 
     ConnectedSocket cs;
     entity_addr_t local_addr;

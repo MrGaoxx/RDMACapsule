@@ -1,5 +1,7 @@
 #include "connection.h"
 
+#include "server.h"
+
 class C_handle_read : public EventCallback {
     Connection *conn;
 
@@ -35,8 +37,27 @@ class C_clean_handler : public EventCallback {
     }
 };
 
-Connection::Connection(Context *context, Server *s, Worker *w) : server(s), state(STATE_NONE), worker(w), center(&w->center) {
+class C_read_callback : public EventCallback {
+    Connection *conn;
+
+   public:
+    explicit C_read_callback(Connection *c) : conn(c) {}
+    void do_request(uint64_t fd) override { (*conn->read_callback)(); }
+};
+
+class C_write_callback : public EventCallback {
+    Connection *conn;
+
+   public:
+    explicit C_write_callback(Connection *c) : conn(c) {}
+    void do_request(uint64_t fd) override { (*conn->write_callback)(); }
+};
+
+Connection::Connection(Context *context, Server *s, Worker *w)
+    : context(context), server(s), stack(s->get_network_stack()), state(STATE_NONE), worker(w), center(&w->center) {
     read_handler = new C_handle_read(this);
+    read_callback_handler = new C_read_callback(this);
+    write_callback_handler = new C_write_callback(this);
 }
 
 void Connection::connect(const entity_addr_t &addr) {
@@ -50,24 +71,26 @@ void Connection::connect(const entity_addr_t &addr) {
 
 void Connection::process() {
     std::lock_guard<std::mutex> l(lock);
-    std::cout << __func__ << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << std::endl;
 
     switch (state) {
         case STATE_NONE: {
-            std::cout << __func__ << " enter none state" << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " enter none state" << std::endl;
             return;
         }
         case STATE_CLOSED: {
-            std::cout << __func__ << " socket closed" << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " socket closed" << std::endl;
             return;
         }
         case STATE_CONNECTING: {
             if (cs) {
+                std::cout << typeid(this).name() << __func__ << "!!! closing existing connected socket when conecting" << std::endl;
                 center->delete_file_event(cs.fd(), EVENT_READABLE | EVENT_WRITABLE);
                 cs.close();
             }
 
             SocketOptions opts;
+            opts.nonblock = false;
             opts.priority = context->m_rdma_config_->m_tcp_priority_;
             opts.connect_bind_addr = context->m_rdma_config_->m_addr;
             ssize_t r = worker->connect(peer_addr, opts, &cs);
@@ -81,13 +104,13 @@ void Connection::process() {
         case STATE_CONNECTING_RE: {
             ssize_t r = cs.is_connected();
             if (r < 0) {
-                std::cout << __func__ << " reconnect failed to " << peer_addr << std::endl;
+                std::cout << typeid(this).name() << " : " << __func__ << " reconnect failed to " << peer_addr << std::endl;
                 if (r == -ECONNREFUSED) {
-                    std::cout << __func__ << " connection refused!" << std::endl;
+                    std::cout << typeid(this).name() << " : " << __func__ << " connection refused!" << std::endl;
                 }
                 return;
             } else if (r == 0) {
-                std::cout << __func__ << " nonblock connect inprogress" << std::endl;
+                std::cout << typeid(this).name() << " : " << __func__ << " nonblock connect inprogress" << std::endl;
                 if (stack->nonblock_connect_need_writable_event()) {
                     center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
                 }
@@ -95,7 +118,8 @@ void Connection::process() {
             }
 
             center->delete_file_event(cs.fd(), EVENT_WRITABLE);
-            std::cout << __func__ << " connect successfully, ready to send banner" << std::endl;
+            center->dispatch_event_external(write_callback_handler);
+            std::cout << typeid(this).name() << " : " << __func__ << " connect successfully, ready to send banner" << std::endl;
             state = STATE_CONNECTION_ESTABLISHED;
             break;
         }
@@ -103,6 +127,7 @@ void Connection::process() {
         case STATE_ACCEPTING: {
             center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
             state = STATE_CONNECTION_ESTABLISHED;
+            center->dispatch_event_external(read_callback_handler);
             break;
         }
 
@@ -113,7 +138,8 @@ void Connection::process() {
 }
 
 void Connection::accept(ConnectedSocket socket, const entity_addr_t &listen_addr, const entity_addr_t &peer_addr_) {
-    std::cout << __func__ << " sd=" << socket.fd() << " listen_addr " << listen_addr << " peer_addr " << peer_addr << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " sd=" << socket.fd() << " listen_addr " << listen_addr << " peer_addr " << peer_addr
+              << std::endl;
     kassert(socket.fd() >= 0);
 
     std::lock_guard<std::mutex> l(lock);

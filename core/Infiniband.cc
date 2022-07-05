@@ -33,7 +33,7 @@ static const uint32_t CQ_DEPTH = 30000;
 Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictxt), port_num(ipn), gid_idx(context->m_rdma_config_->m_gid_index_) {
     int r = ibv_query_port(ctxt, port_num, &port_attr);
     if (r == -1) {
-        std::cout << __func__ << " query port failed  " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " query port failed  " << cpp_strerror(errno) << std::endl;
         abort();
     }
 
@@ -44,11 +44,11 @@ Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictx
     struct ibv_exp_gid_attr gid_attr;
     bool malformed = false;
 
-    std::cout << __func__ << " using experimental verbs for gid" << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " using experimental verbs for gid" << std::endl;
 
     // search for requested GID in GIDs table
-    std::cout << __func__ << " looking for local GID " << (context->m_rdma_config_->ms_async_rdma_local_gid) << " of type "
-              << (context->m_rdma_config_->ms_async_rdma_roce_ver) << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " looking for local GID " << (context->m_rdma_config_->ms_async_rdma_local_gid)
+              << " of type " << (context->m_rdma_config_->ms_async_rdma_roce_ver) << std::endl;
     r = sscanf(context->m_rdma_config_->ms_async_rdma_local_gid.c_str(),
                "%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx"
                ":%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx:%02hhx%02hhx",
@@ -56,7 +56,7 @@ Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictx
                &cgid.raw[9], &cgid.raw[10], &cgid.raw[11], &cgid.raw[12], &cgid.raw[13], &cgid.raw[14], &cgid.raw[15]);
 
     if (r != 16) {
-        std::cout << __func__ << " malformed or no GID supplied, using GID index 0" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " malformed or no GID supplied, using GID index 0" << std::endl;
         malformed = true;
     }
 
@@ -65,31 +65,32 @@ Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictx
     for (gid_idx = 0; gid_idx < port_attr.gid_tbl_len; gid_idx++) {
         r = ibv_query_gid(ctxt, port_num, gid_idx, &gid);
         if (r) {
-            std::cout << __func__ << " query gid of port " << port_num << " index " << gid_idx << " failed  " << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " query gid of port " << port_num << " index " << gid_idx << " failed  "
+                      << cpp_strerror(errno) << std::endl;
             abort();
         }
         r = ibv_exp_query_gid_attr(ctxt, port_num, gid_idx, &gid_attr);
         if (r) {
-            std::cout << __func__ << " query gid attributes of port " << port_num << " index " << gid_idx << " failed  " << cpp_strerror(errno)
-                      << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " query gid attributes of port " << port_num << " index " << gid_idx
+                      << " failed  " << cpp_strerror(errno) << std::endl;
             abort();
         }
 
         if (malformed) break;  // stay with gid_idx=0
         if ((gid_attr.type == context->m_rdma_config_->ms_async_rdma_roce_ver) && (memcmp(&gid, &cgid, 16) == 0)) {
-            std::cout << __func__ << " found at index " << gid_idx << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " found at index " << gid_idx << std::endl;
             break;
         }
     }
 
     if (gid_idx == port_attr.gid_tbl_len) {
-        std::cout << __func__ << " Requested local GID was not found in GID table" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " Requested local GID was not found in GID table" << std::endl;
         abort();
     }
 #else
     r = ibv_query_gid(ctxt, port_num, gid_idx, &gid);
     if (r) {
-        std::cout << __func__ << " query gid failed  " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " query gid failed  " << cpp_strerror(errno) << std::endl;
         abort();
     }
 #endif
@@ -104,7 +105,7 @@ Device::Device(Context *context, ibv_device *ib_dev) : device(ib_dev), active_po
 
     int r = ibv_query_device(ctxt, &device_attr);
     if (r) {
-        std::cout << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << std::endl;
         abort();
     }
 }
@@ -118,7 +119,7 @@ Device::Device(Context *context, struct ibv_context *ib_ctx) : device(ib_ctx->de
 
     int r = ibv_query_device(ctxt, &device_attr);
     if (r) {
-        std::cout << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << std::endl;
         abort();
     }
 }
@@ -129,16 +130,16 @@ void Device::binding_port(Context *context, int port_num) {
         Port *port = new Port(context, ctxt, port_id);
         if (port_id == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
             active_port = port;
-            std::cout << __func__ << " found active port " << static_cast<int>(port_id) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " found active port " << static_cast<int>(port_id) << std::endl;
             break;
         } else {
-            std::cout << __func__ << " port " << port_id << " is not what we want. state: " << ibv_port_state_str(port->get_port_attr()->state)
-                      << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " port " << port_id
+                      << " is not what we want. state: " << ibv_port_state_str(port->get_port_attr()->state) << std::endl;
             delete port;
         }
     }
     if (nullptr == get_port()) {
-        std::cout << __func__ << "  port not found" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << "  port not found" << std::endl;
         kassert(get_port());
     }
 }
@@ -165,7 +166,7 @@ Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type
       q_key(q_key),
       dead(false) {
     if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
-        std::cout << __func__ << " invalid queue pair type" << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " invalid queue pair type" << cpp_strerror(errno) << std::endl;
         abort();
     }
 }
@@ -176,10 +177,10 @@ int Infiniband::QueuePair::modify_qp_to_error(void) {
     memset(&qpa, 0, sizeof(qpa));
     qpa.qp_state = IBV_QPS_ERR;
     if (ibv_modify_qp(qp, &qpa, IBV_QP_STATE)) {
-        std::cout << __func__ << " failed to transition to ERROR state: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to transition to ERROR state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    std::cout << __func__ << " transition to ERROR state successfully." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " transition to ERROR state successfully." << std::endl;
     return 0;
 }
 
@@ -210,10 +211,10 @@ int Infiniband::QueuePair::modify_qp_to_rts(void) {
     int attr_mask = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
     int r = ibv_modify_qp(qp, &qpa, attr_mask);
     if (r) {
-        std::cout << __func__ << " failed to transition to RTS state: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to transition to RTS state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    std::cout << __func__ << " transition to RTS state successfully." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " transition to RTS state successfully." << std::endl;
     return 0;
 }
 
@@ -240,16 +241,17 @@ int Infiniband::QueuePair::modify_qp_to_rtr(void) {
     qpa.ah_attr.src_path_bits = 0;
     qpa.ah_attr.port_num = (uint8_t)(ib_physical_port);
 
-    std::cout << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl "
+              << (int)qpa.ah_attr.sl << std::endl;
 
     int attr_mask = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC;
 
     int r = ibv_modify_qp(qp, &qpa, attr_mask);
     if (r) {
-        std::cout << __func__ << " failed to transition to RTR state: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to transition to RTR state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    std::cout << __func__ << " transition to RTR state successfully." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " transition to RTR state successfully." << std::endl;
     return 0;
 }
 
@@ -281,16 +283,16 @@ int Infiniband::QueuePair::modify_qp_to_init(void) {
     }
 
     if (ibv_modify_qp(qp, &qpa, mask)) {
-        std::cout << __func__ << " failed to switch to INIT state Queue Pair, qp number: " << qp->qp_num << " Error: " << cpp_strerror(errno)
-                  << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to switch to INIT state Queue Pair, qp number: " << qp->qp_num
+                  << " Error: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
-    std::cout << __func__ << " successfully switch to INIT state Queue Pair, qp number: " << qp->qp_num << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " successfully switch to INIT state Queue Pair, qp number: " << qp->qp_num << std::endl;
     return 0;
 }
 
 int Infiniband::QueuePair::init() {
-    std::cout << __func__ << " started." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " started." << std::endl;
     ibv_qp_init_attr qpia;
     // FIPS zeroization audit 20191115: this memset is not security related.
     memset(&qpia, 0, sizeof(qpia));
@@ -311,9 +313,9 @@ int Infiniband::QueuePair::init() {
     if (!context->m_rdma_config_->m_use_rdma_cm_) {
         qp = ibv_create_qp(pd, &qpia);
         if (qp == NULL) {
-            std::cout << __func__ << " failed to create queue pair" << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " failed to create queue pair" << cpp_strerror(errno) << std::endl;
             if (errno == ENOMEM) {
-                std::cout << __func__
+                std::cout << typeid(this).name() << " : " << __func__
                           << " try reducing m_rdma_receive_queue_len_gth, "
                              " m_rdma_send_buffers_ or"
                              " m_rdma_buffer_size_bytes_"
@@ -328,12 +330,13 @@ int Infiniband::QueuePair::init() {
     } else {
         kassert(cm_id->verbs == pd->context);
         if (rdma_create_qp(cm_id, pd, &qpia)) {
-            std::cout << __func__ << " failed to create queue pair with rdmacm library" << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " failed to create queue pair with rdmacm library" << cpp_strerror(errno)
+                      << std::endl;
             return -1;
         }
         qp = cm_id->qp;
     }
-    std::cout << __func__ << " successfully create queue pair: "
+    std::cout << typeid(this).name() << " : " << __func__ << " successfully create queue pair: "
               << "qp=" << qp << std::endl;
     local_cm_meta.local_qpn = get_local_qp_number();
     local_cm_meta.psn = get_initial_psn();
@@ -343,10 +346,12 @@ int Infiniband::QueuePair::init() {
     if (!srq) {
         int rq_wrs = infiniband.post_chunks_to_rq(max_recv_wr, this);
         if (rq_wrs == 0) {
-            std::cout << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num << " fatal error: can't post SQ WR " << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num
+                      << " fatal error: can't post SQ WR " << std::endl;
             return -1;
         }
-        std::cout << __func__ << " initialize no SRQ Queue Pair, qp number: " << qp->qp_num << " post SQ WR " << rq_wrs << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " initialize no SRQ Queue Pair, qp number: " << qp->qp_num << " post SQ WR "
+                  << rq_wrs << std::endl;
     }
     return 0;
 }
@@ -381,17 +386,17 @@ int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
 
     if (r < 0) {
         r = -errno;
-        std::cout << __func__ << " got error " << r << ": " << cpp_strerror(r) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " got error " << r << ": " << cpp_strerror(r) << std::endl;
     } else if (r == 0) {  // valid disconnect message of length 0
-        std::cout << __func__ << " got disconnect message " << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " got disconnect message " << std::endl;
     } else if ((size_t)r != sizeof(msg)) {  // invalid message
-        std::cout << __func__ << " got bad length (" << r << ") " << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " got bad length (" << r << ") " << std::endl;
         r = -EINVAL;
     } else {  // valid message
         sscanf(msg, "%hx:%x:%x:%x:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn), gid);
         wire_gid_to_gid(gid, &peer_cm_meta);
-        std::cout << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn << ", " << peer_cm_meta.psn << ", "
-                  << peer_cm_meta.peer_qpn << ", " << gid << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn << ", "
+                  << peer_cm_meta.psn << ", " << peer_cm_meta.peer_qpn << ", " << gid << std::endl;
     }
     return r;
 }
@@ -405,8 +410,8 @@ int Infiniband::QueuePair::send_cm_meta(Context *context, int socket_fd) {
 retry:
     gid_to_wire_gid(local_cm_meta, gid);
     sprintf(msg, "%04x:%08x:%08x:%08x:%s", local_cm_meta.lid, local_cm_meta.local_qpn, local_cm_meta.psn, local_cm_meta.peer_qpn, gid);
-    std::cout << __func__ << " sending: " << local_cm_meta.lid << ", " << local_cm_meta.local_qpn << ", " << local_cm_meta.psn << ", "
-              << local_cm_meta.peer_qpn << ", " << gid << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " sending: " << local_cm_meta.lid << ", " << local_cm_meta.local_qpn << ", "
+              << local_cm_meta.psn << ", " << local_cm_meta.peer_qpn << ", " << gid << std::endl;
     r = ::write(socket_fd, msg, sizeof(msg));
 
     if ((size_t)r != sizeof(msg)) {
@@ -416,9 +421,9 @@ retry:
             goto retry;
         }
         if (r < 0)
-            std::cout << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << std::endl;
         else
-            std::cout << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << std::endl;
         return -errno;
     }
     return 0;
@@ -439,7 +444,7 @@ int Infiniband::QueuePair::to_dead() {
     if (modify_qp_to_error()) {
         return -1;
     }
-    std::cout << __func__ << " force trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn
+    std::cout << typeid(this).name() << " : " << __func__ << " force trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn
               << " bound remote QueuePair, qp number: " << local_cm_meta.peer_qpn << std::endl;
 
     struct ibv_send_wr *bad_wr = nullptr, beacon;
@@ -449,10 +454,11 @@ int Infiniband::QueuePair::to_dead() {
     beacon.opcode = IBV_WR_SEND;
     beacon.send_flags = IBV_SEND_SIGNALED;
     if (ibv_post_send(qp, &beacon, &bad_wr)) {
-        std::cout << __func__ << " failed to send a beacon: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to send a beacon: " << cpp_strerror(errno) << std::endl;
         return -errno;
     }
-    std::cout << __func__ << " trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn << " Beacon sent " << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn
+              << " Beacon sent " << std::endl;
     dead = true;
 
     return 0;
@@ -464,7 +470,7 @@ int Infiniband::QueuePair::get_remote_qp_number(uint32_t *rqp) const {
 
     int r = ibv_query_qp(qp, &qpa, IBV_QP_DEST_QPN, &qpia);
     if (r) {
-        std::cout << __func__ << " failed to query qp: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to query qp: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
 
@@ -483,7 +489,7 @@ int Infiniband::QueuePair::get_remote_lid(uint16_t *lid) const {
 
     int r = ibv_query_qp(qp, &qpa, IBV_QP_AV, &qpia);
     if (r) {
-        std::cout << __func__ << " failed to query qp: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to query qp: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
 
@@ -500,7 +506,7 @@ int Infiniband::QueuePair::get_state() const {
 
     int r = ibv_query_qp(qp, &qpa, IBV_QP_STATE, &qpia);
     if (r) {
-        std::cout << __func__ << " failed to get state: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to get state: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
     return qpa.qp_state;
@@ -512,16 +518,16 @@ Infiniband::CompletionChannel::CompletionChannel(Context *c, Infiniband &ib)
 Infiniband::CompletionChannel::~CompletionChannel() {
     if (channel) {
         int r = ibv_destroy_comp_channel(channel);
-        if (r < 0) std::cout << __func__ << " failed to destroy cc: " << cpp_strerror(errno) << std::endl;
+        if (r < 0) std::cout << typeid(this).name() << " : " << __func__ << " failed to destroy cc: " << cpp_strerror(errno) << std::endl;
         kassert(r == 0);
     }
 }
 
 int Infiniband::CompletionChannel::init() {
-    std::cout << __func__ << " started." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " started." << std::endl;
     channel = ibv_create_comp_channel(infiniband.device->get_context());
     if (!channel) {
-        std::cout << __func__ << " failed to create receive completion channel: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to create receive completion channel: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
     int rc = Network::NetHandler::set_nonblock(channel->fd);
@@ -541,7 +547,8 @@ bool Infiniband::CompletionChannel::get_cq_event() {
     ibv_cq *cq = NULL;
     void *ev_ctx;
     if (ibv_get_cq_event(channel, &cq, &ev_ctx)) {
-        if (errno != EAGAIN && errno != EINTR) std::cout << __func__ << " failed to retrieve CQ event: " << cpp_strerror(errno) << std::endl;
+        if (errno != EAGAIN && errno != EINTR)
+            std::cout << typeid(this).name() << " : " << __func__ << " failed to retrieve CQ event: " << cpp_strerror(errno) << std::endl;
         return false;
     }
 
@@ -549,7 +556,7 @@ bool Infiniband::CompletionChannel::get_cq_event() {
      *    * be acked, and periodically ack them
      *       */
     if (++cq_events_that_need_ack == MAX_ACK_EVENT) {
-        std::cout << __func__ << " ack aq events." << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " ack aq events." << std::endl;
         ibv_ack_cq_events(cq, MAX_ACK_EVENT);
         cq_events_that_need_ack = 0;
     }
@@ -560,7 +567,7 @@ bool Infiniband::CompletionChannel::get_cq_event() {
 Infiniband::CompletionQueue::~CompletionQueue() {
     if (cq) {
         int r = ibv_destroy_cq(cq);
-        if (r < 0) std::cout << __func__ << " failed to destroy cq: " << cpp_strerror(errno) << std::endl;
+        if (r < 0) std::cout << typeid(this).name() << " : " << __func__ << " failed to destroy cq: " << cpp_strerror(errno) << std::endl;
         kassert(r == 0);
     }
 }
@@ -568,33 +575,33 @@ Infiniband::CompletionQueue::~CompletionQueue() {
 int Infiniband::CompletionQueue::init() {
     cq = ibv_create_cq(infiniband.device->get_context(), queue_depth, this, channel->get_channel(), 0);
     if (!cq) {
-        std::cout << __func__ << " failed to create receive completion queue: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to create receive completion queue: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
 
     if (ibv_req_notify_cq(cq, 0)) {
-        std::cout << __func__ << " ibv_req_notify_cq failed: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " ibv_req_notify_cq failed: " << cpp_strerror(errno) << std::endl;
         ibv_destroy_cq(cq);
         cq = nullptr;
         return -1;
     }
 
     channel->bind_cq(cq);
-    std::cout << __func__ << " successfully create cq=" << cq << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " successfully create cq=" << cq << std::endl;
     return 0;
 }
 
 int Infiniband::CompletionQueue::rearm_notify(bool solicite_only) {
-    std::cout << __func__ << " started." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " started." << std::endl;
     int r = ibv_req_notify_cq(cq, 0);
-    if (r < 0) std::cout << __func__ << " failed to notify cq: " << cpp_strerror(errno) << std::endl;
+    if (r < 0) std::cout << typeid(this).name() << " : " << __func__ << " failed to notify cq: " << cpp_strerror(errno) << std::endl;
     return r;
 }
 
 int Infiniband::CompletionQueue::poll_cq(int num_entries, ibv_wc *ret_wc_array) {
     int r = ibv_poll_cq(cq, num_entries, ret_wc_array);
     if (r < 0) {
-        std::cout << __func__ << " poll_completion_queue occur met error: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " poll_completion_queue occur met error: " << cpp_strerror(errno) << std::endl;
         return -1;
     }
     return r;
@@ -602,7 +609,8 @@ int Infiniband::CompletionQueue::poll_cq(int num_entries, ibv_wc *ret_wc_array) 
 
 Infiniband::ProtectionDomain::ProtectionDomain(Context *context, Device *device) : pd(ibv_alloc_pd(device->get_context())) {
     if (pd == NULL) {
-        std::cout << __func__ << " failed to allocate infiniband protection domain: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to allocate infiniband protection domain: " << cpp_strerror(errno)
+                  << std::endl;
         abort();
     }
 }
@@ -715,8 +723,8 @@ bool Infiniband::MemoryManager::MemPoolContext::can_alloc(unsigned nbufs) {
     if (manager->context->m_rdma_config_->m_rdma_receive_buffers_bytes_ <= 0) return true;
 
     if (n_bufs_allocated + nbufs > (unsigned)manager->context->m_rdma_config_->m_rdma_receive_buffers_bytes_) {
-        std::cout << __func__ << " WARNING: OUT OF RX BUFFERS: allocated: " << n_bufs_allocated << " requested: " << nbufs
-                  << " limit: " << manager->context->m_rdma_config_->m_rdma_receive_buffers_bytes_ << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " WARNING: OUT OF RX BUFFERS: allocated: " << n_bufs_allocated
+                  << " requested: " << nbufs << " limit: " << manager->context->m_rdma_config_->m_rdma_receive_buffers_bytes_ << std::endl;
         return false;
     }
 
@@ -764,7 +772,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
 
     mem_info *minfo = static_cast<mem_info *>(manager->malloc(block_size + sizeof(mem_info)));
     if (!minfo) {
-        std::cout << __func__ << " failed to allocate " << chunk_buffer_number
+        std::cout << typeid(PoolAllocator).name() << " : " << __func__ << " failed to allocate " << chunk_buffer_number
                   << " buffers "
                      " Its block size is : "
                   << block_size + sizeof(mem_info) << std::endl;
@@ -773,7 +781,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type block_siz
 
     minfo->mr = ibv_reg_mr(manager->pd->pd, minfo->chunks, block_size, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
     if (minfo->mr == NULL) {
-        std::cout << __func__ << " failed to do rdma memory registration " << block_size
+        std::cout << typeid(PoolAllocator).name() << " : " << __func__ << " failed to do rdma memory registration " << block_size
                   << " bytes. "
                      " relase allocated memory now."
                   << std::endl;
@@ -884,13 +892,15 @@ static std::atomic<bool> init_prereq = {false};
 
 void Infiniband::verify_prereq(Context *context) {
     int rc = 0;
-    std::cout << __func__ << " ms_async_rdma_enable_hugepage value is: " << context->m_rdma_config_->m_rdma_enable_hugepage_ << std::endl;
+    std::cout << typeid(Infiniband).name() << " : " << __func__
+              << " ms_async_rdma_enable_hugepage value is: " << context->m_rdma_config_->m_rdma_enable_hugepage_ << std::endl;
     if (context->m_rdma_config_->m_rdma_enable_hugepage_) {
         rc = setenv("RDMAV_HUGEPAGES_SAFE", "1", 1);
-        std::cout << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE") << std::endl;
+        std::cout << typeid(Infiniband).name() << " : " << __func__ << " RDMAV_HUGEPAGES_SAFE is set as: " << getenv("RDMAV_HUGEPAGES_SAFE")
+                  << std::endl;
         if (rc) {
-            std::cout << __func__ << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts."
-                      << std::endl;
+            std::cout << typeid(Infiniband).name() << " : " << __func__
+                      << " failed to export RDMA_HUGEPAGES_SAFE. On RDMA must be exported before using huge pages. Application aborts." << std::endl;
             abort();
         }
     }
@@ -898,7 +908,8 @@ void Infiniband::verify_prereq(Context *context) {
     // On RDMA MUST be called before fork
     rc = ibv_fork_init();
     if (rc) {
-        std::cout << __func__ << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << std::endl;
+        std::cout << typeid(Infiniband).name() << " : " << __func__
+                  << " failed to call ibv_for_init(). On RDMA must be called before fork. Application aborts." << std::endl;
         abort();
     }
 
@@ -907,7 +918,7 @@ void Infiniband::verify_prereq(Context *context) {
     getrlimit(RLIMIT_MEMLOCK, &limit);
     if (limit.rlim_cur != RLIM_INFINITY || limit.rlim_max != RLIM_INFINITY) {
         std::cout
-            << __func__
+            << typeid(Infiniband).name() << " : " << __func__
             << "!!! WARNING !!! For RDMA to work properly user memlock (ulimit -l) must be big enough to allow large amount of registered memory."
                " We recommend setting this parameter to infinity"
             << std::endl;
@@ -918,7 +929,7 @@ void Infiniband::verify_prereq(Context *context) {
 Infiniband::Infiniband(Context *context)
     : context(context), device_name(context->m_rdma_config_->m_rdma_device_name_), port_num(context->m_rdma_config_->m_rdma_port_num_) {
     if (!init_prereq) verify_prereq(context);
-    std::cout << __func__ << " constructing Infiniband..." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " constructing Infiniband..." << std::endl;
 }
 
 void Infiniband::init() {
@@ -944,15 +955,15 @@ void Infiniband::init() {
         rx_queue_len = device->get_device_attr()->max_qp_wr;
     if (rx_queue_len > context->m_rdma_config_->m_rdma_receive_queue_len_) {
         rx_queue_len = context->m_rdma_config_->m_rdma_receive_queue_len_;
-        std::cout << __func__ << " assigning: " << rx_queue_len << " receive buffers" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " assigning: " << rx_queue_len << " receive buffers" << std::endl;
     } else {
-        std::cout << __func__ << " using the max allowed receive buffers: " << rx_queue_len << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " using the max allowed receive buffers: " << rx_queue_len << std::endl;
     }
 
     // check for the misconfiguration
     if (context->m_rdma_config_->m_rdma_receive_buffers_bytes_ > 0 &&
         rx_queue_len > (unsigned)context->m_rdma_config_->m_rdma_receive_buffers_bytes_) {
-        std::cout << __func__ << " rdma_receive_queue_len (" << rx_queue_len << ") > m_rdma_receive_buffers_bytes_("
+        std::cout << typeid(this).name() << " : " << __func__ << " rdma_receive_queue_len (" << rx_queue_len << ") > m_rdma_receive_buffers_bytes_("
                   << context->m_rdma_config_->m_rdma_receive_buffers_bytes_ << ")." << std::endl;
         abort();
     }
@@ -961,18 +972,19 @@ void Infiniband::init() {
     tx_queue_len = device->get_device_attr()->max_qp_wr - 1;
     if (tx_queue_len > context->m_rdma_config_->m_rdma_send_queeu_len_) {
         tx_queue_len = context->m_rdma_config_->m_rdma_send_queeu_len_;
-        std::cout << __func__ << " assigning: " << tx_queue_len << " send buffers" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " assigning: " << tx_queue_len << " send buffers" << std::endl;
     } else {
-        std::cout << __func__ << " using the max allowed send buffers: " << tx_queue_len << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " using the max allowed send buffers: " << tx_queue_len << std::endl;
     }
 
     // check for the memory region size misconfiguration
     if ((uint64_t)context->m_rdma_config_->m_rdma_buffer_size_bytes_ * tx_queue_len > device->get_device_attr()->max_mr_size) {
-        std::cout << __func__ << " Out of max memory region size " << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " Out of max memory region size " << std::endl;
         abort();
     }
 
-    std::cout << __func__ << " device allow " << device->get_device_attr()->max_cqe << " completion entries" << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " device allow " << device->get_device_attr()->max_cqe << " completion entries"
+              << std::endl;
 
     memory_manager = new MemoryManager(context, device, pd);
     memory_manager->create_tx_pool(context->m_rdma_config_->m_rdma_buffer_size_bytes_, tx_queue_len);
@@ -1046,7 +1058,8 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
     while (i < rq_wr_num) {
         chunk = get_memory_manager()->get_rx_buffer();
         if (chunk == nullptr) {
-            std::cout << __func__ << " WARNING: out of memory. Request " << rq_wr_num << " rx buffers. Only get " << i << " rx buffers." << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " WARNING: out of memory. Request " << rq_wr_num << " rx buffers. Only get " << i
+                      << " rx buffers." << std::endl;
             if (i == 0) {
                 ::free(rx_work_request);
                 ::free(isge);
@@ -1107,9 +1120,10 @@ Infiniband::CompletionQueue *Infiniband::create_comp_queue(Context *context, Com
 }
 
 Infiniband::QueuePair::~QueuePair() {
-    std::cout << __func__ << " destroy Queue Pair, qp number: " << qp->qp_num << " left SQ WR " << recv_queue.size() << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " destroy Queue Pair, qp number: " << qp->qp_num << " left SQ WR " << recv_queue.size()
+              << std::endl;
     if (qp) {
-        std::cout << __func__ << " destroy qp=" << qp << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " destroy qp=" << qp << std::endl;
         kassert(!ibv_destroy_qp(qp));
     }
 

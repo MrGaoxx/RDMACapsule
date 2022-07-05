@@ -8,14 +8,19 @@ Server::Server(Context *c) : context(c), accepting_conns() {
 }
 
 void Server::start() {
-    for (auto &&p : processors) p->start();
+    stack->start();
+    stack->ready();
+}
+
+void Server::stop() {
+    // tbd
 }
 
 int Server::bind(const entity_addr_t &bind_addr) {
     lock.lock();
 
     if (!stack->is_ready()) {
-        std::cout << __func__ << " Network Stack is not ready for bind yet - postponed" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " Network Stack is not ready for bind yet - postponed" << std::endl;
         return 0;
     }
 
@@ -25,10 +30,15 @@ int Server::bind(const entity_addr_t &bind_addr) {
     unsigned i = 0;
     // choose a random prorcessor to bind
     auto &&p = processors[conn_count % processors.size()];
+    if (p->is_running()) {
+        std::cout << typeid(this).name() << " : " << __func__ << "listen failed, thread is running" << std::endl;
+        return -EBUSY;
+    }
     int r = p->bind(bind_addr, &bound_addr);
     if (r) {
         return r;
     }
+    p->start();
     ++conn_count;
     return 0;
 }
@@ -36,7 +46,7 @@ int Server::bind(const entity_addr_t &bind_addr) {
 Connection *Server::create_connect(const entity_addr_t &addr) {
     std::lock_guard l{lock};
 
-    std::cout << __func__ << " " << addr << ", creating connection and registering" << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " " << addr << ", creating connection and registering" << std::endl;
 
     // here is where we decide which of the addrs to connect to.  always prefer
     // the first one, if we support it.
@@ -44,9 +54,9 @@ Connection *Server::create_connect(const entity_addr_t &addr) {
     // create connection
     Worker *w = stack->get_worker();
     auto conn = new Connection(context, this, w);
+    conn->write_callback = conn_write_callback;
     conn->connect(target);
-
-    std::cout << __func__ << " " << conn << " " << addr << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " " << conn << " " << addr << std::endl;
     conns[target] = conn;
     return conn;
 }
@@ -56,6 +66,7 @@ void Server::accept(Worker *w, ConnectedSocket cli_socket, const entity_addr_t &
     auto conn = new Connection(context, this, w);
     conn->accept(std::move(cli_socket), listen_addr, peer_addr);
     accepting_conns.insert(conn);
+    conn->read_callback = conn_read_callback;
 }
 
 Server::~Server() {}

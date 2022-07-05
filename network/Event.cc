@@ -60,7 +60,8 @@ class C_handle_notify : public EventCallback {
         do {
             r = read(fd_or_id, c, sizeof(c));
             if (r < 0) {
-                if (errno != EAGAIN) std::cout << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << std::endl;
+                if (errno != EAGAIN)
+                    std::cout << typeid(this).name() << " : " << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << std::endl;
             }
         } while (r > 0);
     }
@@ -112,13 +113,13 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type) {
     driver = new EpollDriver(context);
 
     if (!driver) {
-        std::cout << __func__ << " failed to create event driver " << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to create event driver " << std::endl;
         return -1;
     }
 
     int r = driver->init(this, nevent);
     if (r < 0) {
-        std::cout << __func__ << " failed to init event driver." << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to init event driver." << std::endl;
         return r;
     }
 
@@ -131,7 +132,7 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type) {
 
     if (pipe_cloexec(fds, 0) < 0) {
         int e = errno;
-        std::cout << __func__ << " can't create notify pipe: " << cpp_strerror(e) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " can't create notify pipe: " << cpp_strerror(e) << std::endl;
         return -e;
     }
 
@@ -171,7 +172,7 @@ EventCenter::~EventCenter() {
 
 void EventCenter::set_owner() {
     owner = pthread_self();
-    std::cout << __func__ << " center_id=" << center_id << " owner=" << owner << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " center_id=" << center_id << " owner=" << owner << std::endl;
     if (!global_centers) {
         global_centers = &context->m_associateCenters;
         kassert(global_centers);
@@ -190,10 +191,10 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt) {
     if (fd >= nevent) {
         int new_size = nevent << 2;
         while (fd >= new_size) new_size <<= 2;
-        std::cout << __func__ << " event count exceed " << nevent << ", expand to " << new_size << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " event count exceed " << nevent << ", expand to " << new_size << std::endl;
         r = driver->resize_events(new_size);
         if (r < 0) {
-            std::cout << __func__ << " event count is exceed." << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " event count is exceed." << std::endl;
             return -ERANGE;
         }
         file_events.resize(new_size);
@@ -201,7 +202,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt) {
     }
 
     EventCenter::FileEvent *event = _get_file_event(fd);
-    std::cout << __func__ << " create event started fd=" << fd << " mask=" << mask << " original mask is " << event->mask << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " create event started fd=" << fd << " mask=" << mask << " original mask is "
+              << event->mask << std::endl;
     if (event->mask == mask) return 0;
 
     r = driver->add_event(fd, event->mask, mask);
@@ -209,8 +211,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt) {
         // Actually we don't allow any failed error code, caller doesn't prepare to
         // handle error status. So now we need to assert failure here. In practice,
         // add_event shouldn't report error, otherwise it must be a innermost bug!
-        std::cout << __func__ << " add event failed, ret=" << r << " fd=" << fd << " mask=" << mask << " original mask is " << event->mask
-                  << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " add event failed, ret=" << r << " fd=" << fd << " mask=" << mask
+                  << " original mask is " << event->mask << std::endl;
         abort();
         return r;
     }
@@ -222,18 +224,21 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt) {
     if (mask & EVENT_WRITABLE) {
         event->write_cb = ctxt;
     }
-    std::cout << __func__ << " create event end fd=" << fd << " mask=" << mask << " current mask is " << event->mask << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " create event end fd=" << fd << " mask=" << mask << " current mask is " << event->mask
+              << std::endl;
     return 0;
 }
 
 void EventCenter::delete_file_event(int fd, int mask) {
     kassert(in_thread() && fd >= 0);
     if (fd >= nevent) {
-        std::cout << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent << "mask=" << mask << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " delete event fd=" << fd << " is equal or greater than nevent=" << nevent
+                  << "mask=" << mask << std::endl;
         return;
     }
     EventCenter::FileEvent *event = _get_file_event(fd);
-    std::cout << __func__ << " delete event started fd=" << fd << " mask=" << mask << " original mask is " << event->mask << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " delete event started fd=" << fd << " mask=" << mask << " original mask is "
+              << event->mask << std::endl;
     if (!event->mask) return;
 
     int r = driver->del_event(fd, event->mask, mask);
@@ -250,14 +255,15 @@ void EventCenter::delete_file_event(int fd, int mask) {
     }
 
     event->mask = event->mask & (~mask);
-    std::cout << __func__ << " delete event end fd=" << fd << " mask=" << mask << " current mask is " << event->mask << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " delete event end fd=" << fd << " mask=" << mask << " current mask is " << event->mask
+              << std::endl;
 }
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt) {
     kassert(in_thread());
     uint64_t id = time_event_next_id++;
 
-    std::cout << __func__ << " id=" << id << " trigger after " << microseconds << "us" << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " id=" << id << " trigger after " << microseconds << "us" << std::endl;
     EventCenter::TimeEvent event;
     clock_type::time_point expire = clock_type::now() + std::chrono::microseconds(microseconds);
     event.id = id;
@@ -271,12 +277,12 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
 
 void EventCenter::delete_time_event(uint64_t id) {
     kassert(in_thread());
-    std::cout << __func__ << " id=" << id << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " id=" << id << std::endl;
     if (id >= time_event_next_id || id == 0) return;
 
     auto it = event_map.find(id);
     if (it == event_map.end()) {
-        std::cout << __func__ << " id=" << id << " not found" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " id=" << id << " not found" << std::endl;
         return;
     }
 
@@ -288,13 +294,13 @@ void EventCenter::wakeup() {
     // No need to wake up since we never sleep
     if (!pollers.empty() || !driver->need_wakeup()) return;
 
-    std::cout << __func__ << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << std::endl;
     char buf = 'c';
     // wake up "event_wait"
     int n = write(notify_send_fd, &buf, sizeof(buf));
     if (n < 0) {
         if (errno != EAGAIN) {
-            std::cout << __func__ << " write notify pipe failed: " << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " write notify pipe failed: " << cpp_strerror(errno) << std::endl;
             abort();
         }
     }
@@ -303,7 +309,7 @@ void EventCenter::wakeup() {
 int EventCenter::process_time_events() {
     int processed = 0;
     clock_type::time_point now = clock_type::now();
-    std::cout << __func__ << " cur time is " << now << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " cur time is " << now << std::endl;
 
     while (!time_events.empty()) {
         auto it = time_events.begin();
@@ -313,7 +319,7 @@ int EventCenter::process_time_events() {
             uint64_t id = e.id;
             time_events.erase(it);
             event_map.erase(id);
-            std::cout << __func__ << " process time event: id=" << id << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " process time event: id=" << id << std::endl;
             processed++;
             cb->do_request(id);
         } else {
@@ -348,7 +354,7 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
     tv.tv_sec = timeout_microseconds / 1000000;
     tv.tv_usec = timeout_microseconds % 1000000;
 
-    std::cout << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << std::endl;
     std::vector<FiredFileEvent> fired_events;
     numevents = driver->event_wait(fired_events, &tv);
     auto working_start = common::mono_clock::now();
@@ -374,7 +380,8 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
             }
         }
 
-        std::cout << __func__ << " event_wq process is " << fired_events[event_id].fd << " mask is " << fired_events[event_id].mask << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " event_wq process is " << fired_events[event_id].fd << " mask is "
+                  << fired_events[event_id].mask << std::endl;
     }
 
     if (trigger_time) numevents += process_time_events();
@@ -388,7 +395,7 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
         numevents += cur_process.size();
         while (!cur_process.empty()) {
             EventCallbackRef e = cur_process.front();
-            std::cout << __func__ << " do " << e << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " do " << e << std::endl;
             e->do_request(0);
             cur_process.pop_front();
         }
@@ -414,5 +421,5 @@ void EventCenter::dispatch_event_external(EventCallbackRef e) {
     }
     if (num == 1 && !in_thread()) wakeup();
 
-    std::cout << __func__ << " " << e << " pending " << num << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " " << e << " pending " << num << std::endl;
 }

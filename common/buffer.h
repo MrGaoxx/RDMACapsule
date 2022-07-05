@@ -32,8 +32,8 @@ class Buffer {
     char* get_raw_buffer() { return start; }
     uint32_t Move(uint32_t size) {
         char* prev = cur;
-        cur = ((start + len) > (cur + size)) ? cur + size : start + len;
-        return (cur < start + len) ? 0 : (size - static_cast<uint32_t>(cur - prev));
+        cur = ((start + len) > (cur + size)) ? (cur + size) : (start + len);
+        return (cur == start + len) ? 0 : (size - static_cast<uint32_t>(cur - prev));
     }
 
    private:

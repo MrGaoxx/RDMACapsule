@@ -35,7 +35,7 @@ int SelectDriver::init(EventCenter *c, int nevent) {
 }
 
 int SelectDriver::add_event(int fd, int cur_mask, int add_mask) {
-    std::cout << __func__ << " add event to fd=" << fd << " mask=" << add_mask << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " add event to fd=" << fd << " mask=" << add_mask << std::endl;
 
     int mask = cur_mask | add_mask;
     if (mask & EVENT_READABLE) FD_SET(fd, &rfds);
@@ -46,7 +46,7 @@ int SelectDriver::add_event(int fd, int cur_mask, int add_mask) {
 }
 
 int SelectDriver::del_event(int fd, int cur_mask, int delmask) {
-    std::cout << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask << std::endl;
 
     if (delmask & EVENT_READABLE) FD_CLR(fd, &rfds);
     if (delmask & EVENT_WRITABLE) FD_CLR(fd, &wfds);

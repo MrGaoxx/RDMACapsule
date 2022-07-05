@@ -119,11 +119,15 @@ inline void RDMAConfig::parse(std::string& key, std::string& val) {
 
         std::cout << " ip_addr = " << m_ip_addr << std::endl;
     } else if (key == "LISTEN_PORT") {
-        m_addr.u.sin.sin_port = static_cast<uint16_t>(std::stoi(val));
+        m_listen_port = static_cast<uint16_t>(std::stoi(val));
+        m_addr.u.sin.sin_port = m_listen_port;
         std::cout << " listen_port = " << m_listen_port << std::endl;
     } else if (key == "RDMA_DEVICE_NAME") {
         m_rdma_device_name_ = val;
         std::cout << " rdma_device_name = " << m_rdma_device_name_ << std::endl;
+    } else if (key == "RDMA_THREADS_NUM") {
+        m_op_threads_num_ = std::stoi(val);
+        std::cout << " m_op_threads_num = " << m_op_threads_num_ << std::endl;
     }
     return;
 }

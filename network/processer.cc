@@ -17,7 +17,7 @@ Processor::Processor(Server* s, Worker* w, Context* c, NetworkStack* ns)
 
 int Processor::bind(const entity_addr_t& bind_addr, entity_addr_t* bound_addr) {
     // bind to socket(s)
-    std::cout << __func__ << " " << bind_addr << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " " << bind_addr << std::endl;
 
     SocketOptions opts;
     opts.nodelay = context->m_rdma_config_->m_tcp_nodelay_;
@@ -30,8 +30,8 @@ int Processor::bind(const entity_addr_t& bind_addr, entity_addr_t* bound_addr) {
 
     for (int i = 0; i < context->m_rdma_config_->m_bind_retry_count_; i++) {
         if (i > 0) {
-            std::cout << __func__ << " was unable to bind. Trying again in " << context->m_rdma_config_->m_bind_retry_delay_seconds_ << " seconds "
-                      << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " was unable to bind. Trying again in "
+                      << context->m_rdma_config_->m_bind_retry_delay_seconds_ << " seconds " << std::endl;
             sleep(context->m_rdma_config_->m_bind_retry_delay_seconds_);
         }
 
@@ -41,7 +41,7 @@ int Processor::bind(const entity_addr_t& bind_addr, entity_addr_t* bound_addr) {
         worker->center.submit_to(
             worker->center.get_id(), [this, &listen_addr, &opts, &r]() { r = worker->listen(listen_addr, opts, &listen_socket); }, false);
         if (r < 0) {
-            std::cout << __func__ << " unable to bind to " << listen_addr << ": " << cpp_strerror(r) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " unable to bind to " << listen_addr << ": " << cpp_strerror(r) << std::endl;
             continue;
         }
         if (r == 0) {
@@ -50,34 +50,39 @@ int Processor::bind(const entity_addr_t& bind_addr, entity_addr_t* bound_addr) {
     }
     // It seems that binding completely failed, return with that exit status
     if (r < 0) {
-        std::cout << __func__ << " was unable to bind after " << context->m_rdma_config_->m_bind_retry_count_ << " attempts: " << cpp_strerror(r)
-                  << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " was unable to bind after " << context->m_rdma_config_->m_bind_retry_count_
+                  << " attempts: " << cpp_strerror(r) << std::endl;
         // clean up previous bind
         listen_socket.abort_accept();
 
         return r;
     }
 
-    std::cout << __func__ << " bound to " << *bound_addr << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " bound to " << *bound_addr << std::endl;
     return 0;
 }
 
 void Processor::start() {
-    std::cout << __func__ << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << std::endl;
 
+    if (is_started) {
+        return;
+    }
     // start thread
     worker->center.submit_to(
         worker->center.get_id(),
         [this]() {
             if (listen_socket) {
                 if (listen_socket.fd() == -1) {
-                    std::cout << __func__ << " Error: processor restart after listen_socket.fd closed. " << this << std::endl;
+                    std::cout << typeid(this).name() << " : " << __func__ << " Error: processor restart after listen_socket.fd closed. " << this
+                              << std::endl;
                     return;
                 }
                 worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE, listen_handler);
             }
         },
         false);
+    is_started = true;
 }
 
 void Processor::accept() {
@@ -86,7 +91,7 @@ void Processor::accept() {
     opts.rcbuf_size = context->m_rdma_config_->m_tcp_rcvbuf_;
     opts.priority = context->m_rdma_config_->m_tcp_priority_;
 
-    std::cout << __func__ << " listen_fd=" << listen_socket.fd() << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " listen_fd=" << listen_socket.fd() << std::endl;
     unsigned accept_error_num = 0;
 
     while (true) {
@@ -97,7 +102,7 @@ void Processor::accept() {
         w = stack->get_worker();
         int r = listen_socket.accept(&cli_socket, opts, &addr, w);
         if (r == 0) {
-            std::cout << __func__ << " accepted incoming on sd " << cli_socket.fd() << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " accepted incoming on sd " << cli_socket.fd() << std::endl;
             server->accept(w, std::move(cli_socket), listen_socket.get_addr(), addr);
             accept_error_num = 0;
             continue;
@@ -108,19 +113,19 @@ void Processor::accept() {
             } else if (r == -EAGAIN) {
                 break;
             } else if (r == -EMFILE || r == -ENFILE) {
-                std::cout << __func__ << " open file descriptions limit reached sd = " << listen_socket.fd() << " errno " << r << " "
-                          << cpp_strerror(r) << std::endl;
+                std::cout << typeid(this).name() << " : " << __func__ << " open file descriptions limit reached sd = " << listen_socket.fd()
+                          << " errno " << r << " " << cpp_strerror(r) << std::endl;
                 if (++accept_error_num > context->m_rdma_config_->m_max_accept_failures_) {
                     std::cout << "Proccessor accept has encountered enough error numbers, just do abort()." << std::endl;
                     abort();
                 }
                 continue;
             } else if (r == -ECONNABORTED) {
-                std::cout << __func__ << " it was closed because of rst arrived sd = " << listen_socket.fd() << " errno " << r << " "
-                          << cpp_strerror(r) << std::endl;
+                std::cout << typeid(this).name() << " : " << __func__ << " it was closed because of rst arrived sd = " << listen_socket.fd()
+                          << " errno " << r << " " << cpp_strerror(r) << std::endl;
                 continue;
             } else {
-                std::cout << __func__ << " no incoming connection?"
+                std::cout << typeid(this).name() << " : " << __func__ << " no incoming connection?"
                           << " errno " << r << " " << cpp_strerror(r) << std::endl;
                 if (++accept_error_num > context->m_rdma_config_->m_max_accept_failures_) {
                     std::cout << "Proccessor accept has encountered enough error numbers, just do abort()." << std::endl;
@@ -133,7 +138,7 @@ void Processor::accept() {
 }
 
 void Processor::stop() {
-    std::cout << __func__ << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << std::endl;
 
     worker->center.submit_to(
         worker->center.get_id(),
@@ -144,4 +149,5 @@ void Processor::stop() {
             }
         },
         false);
+    is_started = false;
 }

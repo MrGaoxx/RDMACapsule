@@ -37,7 +37,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr) {
 
     if ((s = socket(domain, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1) {
         r = errno;
-        std::cout << __func__ << " couldn't create socket " << cpp_strerror(r) << std::endl;
+        std::cout << typeid(NetHandler).name() << " : " << __func__ << " couldn't create socket " << cpp_strerror(r) << std::endl;
         return -r;
     }
 
@@ -48,7 +48,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr) {
        int on = 1;
        if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (SOCKOPT_VAL_TYPE)&on, sizeof(on)) == -1) {
            r = errno;
-           std::cout << __func__ << " setsockopt SO_REUSEADDR failed: " << strerror(r) << std::endl;
+           std::cout << typeid(this).name() << " : " << __func__ << " setsockopt SO_REUSEADDR failed: " << strerror(r) << std::endl;
            close(s);
            return -r;
        }
@@ -67,12 +67,12 @@ int NetHandler::set_nonblock(int sd) {
      * interrupted by a signal. */
     if ((flags = fcntl(sd, F_GETFL)) < 0) {
         r = errno;
-        std::cout << __func__ << " fcntl(F_GETFL) failed: " << cpp_strerror(r) << std::endl;
+        std::cout << typeid(NetHandler).name() << " : " << __func__ << " fcntl(F_GETFL) failed: " << cpp_strerror(r) << std::endl;
         return -r;
     }
     if (fcntl(sd, F_SETFL, flags | O_NONBLOCK) < 0) {
         r = errno;
-        std::cout << __func__ << " fcntl(F_SETFL,O_NONBLOCK): " << cpp_strerror(r) << std::endl;
+        std::cout << typeid(NetHandler).name() << " : " << __func__ << " fcntl(F_SETFL,O_NONBLOCK): " << cpp_strerror(r) << std::endl;
         return -r;
     }
     return 0;
@@ -141,7 +141,8 @@ void NetHandler::set_priority(int sd, int prio, int domain) {
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, (SOCKOPT_VAL_TYPE)&prio, sizeof(prio));
     if (r < 0) {
         r = errno;
-        std::cout << __func__ << " couldn't set SO_PRIORITY to " << prio << ": " << cpp_strerror(r) << std::endl;
+        std::cout << typeid(NetHandler).name() << " : " << __func__ << " couldn't set SO_PRIORITY to " << prio << ": " << cpp_strerror(r)
+                  << std::endl;
     }
 #else
     return;
@@ -169,7 +170,7 @@ int NetHandler::generic_connect(Context *context, const entity_addr_t &addr, con
             ret = ::bind(s, addr.get_sockaddr(), addr.get_sockaddr_len());
             if (ret < 0) {
                 ret = errno;
-                std::cout << __func__ << " client bind error "
+                std::cout << typeid(NetHandler).name() << " : " << __func__ << " client bind error "
                           << ", " << cpp_strerror(ret) << std::endl;
                 close(s);
                 return -ret;
@@ -183,7 +184,7 @@ int NetHandler::generic_connect(Context *context, const entity_addr_t &addr, con
         // Windows can return WSAEWOULDBLOCK (converted to EAGAIN).
         if ((ret == EINPROGRESS || ret == EAGAIN) && nonblock) return s;
 
-        std::cout << __func__ << " connect: " << cpp_strerror(ret) << std::endl;
+        std::cout << typeid(NetHandler).name() << " : " << __func__ << " connect: " << cpp_strerror(ret) << std::endl;
         close(s);
         return -ret;
     }
@@ -197,7 +198,7 @@ int NetHandler::reconnect(const entity_addr_t &addr, int sd) {
 
     if (ret < 0 && errno != EISCONN) {
         r = errno;
-        std::cout << __func__ << " reconnect: " << r << " " << strerror(r) << std::endl;
+        std::cout << typeid(NetHandler).name() << " : " << __func__ << " reconnect: " << r << " " << strerror(r) << std::endl;
         if (r == EINPROGRESS || r == EALREADY || r == EAGAIN) return 1;
         return -r;
     }

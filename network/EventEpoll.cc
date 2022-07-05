@@ -23,19 +23,19 @@
 int EpollDriver::init(EventCenter *c, int nevent) {
     events = (struct epoll_event *)calloc(nevent, sizeof(struct epoll_event));
     if (!events) {
-        std::cout << __func__ << " unable to malloc memory. " << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " unable to malloc memory. " << std::endl;
         return -ENOMEM;
     }
 
     epfd = epoll_create(1024); /* 1024 is just an hint for the kernel */
     if (epfd == -1) {
-        std::cout << __func__ << " unable to do epoll_create: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " unable to do epoll_create: " << cpp_strerror(errno) << std::endl;
         return -errno;
     }
     if (::fcntl(epfd, F_SETFD, FD_CLOEXEC) == -1) {
         int e = errno;
         ::close(epfd);
-        std::cout << __func__ << " unable to set cloexec: " << cpp_strerror(e) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " unable to set cloexec: " << cpp_strerror(e) << std::endl;
 
         return -e;
     }
@@ -46,7 +46,8 @@ int EpollDriver::init(EventCenter *c, int nevent) {
 }
 
 int EpollDriver::add_event(int fd, int cur_mask, int add_mask) {
-    std::cout << __func__ << " add event fd=" << fd << " cur_mask=" << cur_mask << " add_mask=" << add_mask << " to " << epfd << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " add event fd=" << fd << " cur_mask=" << cur_mask << " add_mask=" << add_mask << " to "
+              << epfd << std::endl;
     struct epoll_event ee;
     /* If the fd was already monitored for some event, we need a MOD
      * operation. Otherwise we need an ADD operation. */
@@ -60,7 +61,7 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask) {
     ee.data.u64 = 0; /* avoid valgrind warning */
     ee.data.fd = fd;
     if (epoll_ctl(epfd, op, fd, &ee) == -1) {
-        std::cout << __func__ << " epoll_ctl: add fd=" << fd << " failed. " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " epoll_ctl: add fd=" << fd << " failed. " << cpp_strerror(errno) << std::endl;
         return -errno;
     }
 
@@ -68,7 +69,8 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask) {
 }
 
 int EpollDriver::del_event(int fd, int cur_mask, int delmask) {
-    std::cout << __func__ << " del event fd=" << fd << " cur_mask=" << cur_mask << " delmask=" << delmask << " to " << epfd << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " del event fd=" << fd << " cur_mask=" << cur_mask << " delmask=" << delmask << " to "
+              << epfd << std::endl;
     struct epoll_event ee = {0};
     int mask = cur_mask & (~delmask);
     int r = 0;
@@ -80,14 +82,15 @@ int EpollDriver::del_event(int fd, int cur_mask, int delmask) {
         if (mask & EVENT_WRITABLE) ee.events |= EPOLLOUT;
 
         if ((r = epoll_ctl(epfd, EPOLL_CTL_MOD, fd, &ee)) < 0) {
-            std::cout << __func__ << " epoll_ctl: modify fd=" << fd << " mask=" << mask << " failed." << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " epoll_ctl: modify fd=" << fd << " mask=" << mask << " failed."
+                      << cpp_strerror(errno) << std::endl;
             return -errno;
         }
     } else {
         /* Note, Kernel < 2.6.9 requires a non null event pointer even for
          * EPOLL_CTL_DEL. */
         if ((r = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ee)) < 0) {
-            std::cout << __func__ << " epoll_ctl: delete fd=" << fd << " failed." << cpp_strerror(errno) << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " epoll_ctl: delete fd=" << fd << " failed." << cpp_strerror(errno) << std::endl;
             return -errno;
         }
     }

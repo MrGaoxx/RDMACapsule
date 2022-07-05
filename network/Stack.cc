@@ -26,17 +26,16 @@ std::function<void()> NetworkStack::add_thread(Worker* w) {
         rename_thread(w->id);
         const unsigned EventMaxWaitUs = 30000000;
         w->center.set_owner();
-        std::cout << __func__ << " starting" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " starting" << std::endl;
         w->initialize();
         w->init_done();
         while (!w->done) {
-            std::cout << __func__ << " calling event process" << std::endl;
+            std::cout << typeid(this).name() << " : " << __func__ << " calling event process" << std::endl;
 
             common::timespan dur;
             int r = w->center.process_events(EventMaxWaitUs, &dur);
             if (r < 0) {
-                std::cout << __func__ << " process events failed: " << cpp_strerror(errno) << std::endl;
-                // TODO do something?
+                std::cout << typeid(this).name() << " : " << __func__ << " process events failed: " << cpp_strerror(errno) << std::endl;
             }
             w->perf_logger->tinc(l_msgr_running_total_time, dur);
         }
@@ -54,7 +53,7 @@ std::shared_ptr<NetworkStack> NetworkStack::create(Context* c, const std::string
         stack.reset(new RDMAStack(c));
 
     if (stack == nullptr) {
-        std::cout << __func__ << " ms_async_transport_type " << t << " is not supported! " << std::endl;
+        std::cout << typeid(NetworkStack).name() << " : " << __func__ << " ms_async_transport_type " << t << " is not supported! " << std::endl;
         abort();
         return nullptr;
     }
@@ -62,7 +61,8 @@ std::shared_ptr<NetworkStack> NetworkStack::create(Context* c, const std::string
     unsigned num_workers = c->m_rdma_config_->m_op_threads_num_;
     kassert(num_workers > 0);
     if (num_workers >= EventCenter::MAX_EVENTCENTER) {
-        std::cout << __func__ << " max thread limit is " << EventCenter::MAX_EVENTCENTER << ", switching to this now. "
+        std::cout << typeid(NetworkStack).name() << " : " << __func__ << " max thread limit is " << EventCenter::MAX_EVENTCENTER
+                  << ", switching to this now. "
                   << "Higher thread values are unnecessary and currently unsupported." << std::endl;
         num_workers = EventCenter::MAX_EVENTCENTER;
     }
@@ -99,7 +99,7 @@ void NetworkStack::start() {
 }
 
 Worker* NetworkStack::get_worker() {
-    std::cout << __func__ << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << std::endl;
 
     // start with some reasonably large number
     unsigned min_load = std::numeric_limits<int>::max();
@@ -153,7 +153,7 @@ class C_drain : public EventCallback {
 };
 
 void NetworkStack::drain() {
-    std::cout << __func__ << " started." << std::endl;
+    std::cout << typeid(this).name() << " started." << std::endl;
     pthread_t cur = pthread_self();
     pool_spin.lock();
     C_drain drain(get_num_worker());
@@ -163,5 +163,5 @@ void NetworkStack::drain() {
     }
     pool_spin.unlock();
     drain.wait();
-    std::cout << __func__ << " end." << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " end." << std::endl;
 }

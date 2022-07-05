@@ -3,14 +3,20 @@
 #include "core/connection.h"
 #include "network/processer.h"
 class RDMAStack;
+
 class Server {
    public:
     Server(Context *context);
-    void start();
     ~Server();
+
+    void start();
+    void stop();
+
     int bind(const entity_addr_t &bind_addr);
-    Connection *create_connect(const entity_addr_t &addr);
     void accept(Worker *w, ConnectedSocket cli_socket, const entity_addr_t &listen_addr, const entity_addr_t &peer_addr);
+
+    Connection *create_connect(const entity_addr_t &addr);
+
     int Send(entity_addr_t dst, BufferList bl) { conns[dst]->Send(bl); }
     ssize_t Read(entity_addr_t addr, char *buf, size_t n) {
         // tbd
@@ -19,7 +25,10 @@ class Server {
         return (*accepting_conns.begin())->Read(buf, n);
     };
 
+    NetworkStack *get_network_stack() { return stack.get(); }
     RDMAStack *get_rdma_stack() { return reinterpret_cast<RDMAStack *>(stack.get()); }
+    std::function<void(void)> *conn_read_callback;
+    std::function<void(void)> *conn_write_callback;
 
    private:
     std::shared_ptr<NetworkStack> stack;

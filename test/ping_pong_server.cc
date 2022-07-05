@@ -4,16 +4,18 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 
+#include <functional>
+
 #include "RDMAStack.h"
 #include "common.h"
 #include "common/context.h"
 #include "core/Infiniband.h"
 #include "core/server.h"
-
 class RDMAPingPongServer {
    public:
     RDMAPingPongServer(std::string& configFileName);
     ~RDMAPingPongServer();
+
     void Init();
     int Listen();
     void Poll();
@@ -31,6 +33,7 @@ class RDMAPingPongServer {
 
     entity_addr_t server_addr;
     entity_addr_t client_addr;
+    std::function<void(void)> poll_call;
 };
 
 RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
@@ -41,12 +44,12 @@ RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
       pos(0),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
-    rdma_config = new RDMAConfig(configFileName);
+    poll_call = std::bind(&RDMAPingPongServer::Poll, this);
+    server.conn_read_callback = &poll_call;
 }
 RDMAPingPongServer::~RDMAPingPongServer() {
     delete rdma_config;
     delete context;
-    // free(reinterpret_cast<void*>(recv_buffer));
 }
 void RDMAPingPongServer::Init() { server.start(); }
 int RDMAPingPongServer::Listen() {
@@ -93,7 +96,6 @@ int main(int argc, char* argv[]) {
     } else {
         std::cout << "==========> listening socket succeeded" << std::endl;
     };
-    // server.Accept();
-    server.Poll();
+    sleep(100000);
     return 0;
 }

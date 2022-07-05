@@ -26,7 +26,7 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt) {
     server_setup_socket = Network::NetHandler::create_socket(sa.get_family(), true);
     if (server_setup_socket < 0) {
         rc = -errno;
-        std::cout << __func__ << " failed to create server socket: " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " failed to create server socket: " << cpp_strerror(errno) << std::endl;
         return rc;
     }
 
@@ -43,19 +43,19 @@ int RDMAServerSocketImpl::listen(entity_addr_t &sa, const SocketOptions &opt) {
     rc = ::bind(server_setup_socket, sa.get_sockaddr(), sa.get_sockaddr_len());
     if (rc < 0) {
         rc = -errno;
-        std::cout << __func__ << " unable to bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << ": " << cpp_strerror(errno)
-                  << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " unable to bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << ": "
+                  << cpp_strerror(errno) << std::endl;
         goto err;
     }
 
     rc = ::listen(server_setup_socket, context->m_rdma_config_->m_tcp_listen_backlog_);
     if (rc < 0) {
         rc = -errno;
-        std::cout << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(errno) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(errno) << std::endl;
         goto err;
     }
 
-    std::cout << __func__ << " bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " bind to " << sa.get_sockaddr() << " on port " << sa.get_port() << std::endl;
     return 0;
 
 err:
@@ -65,7 +65,7 @@ err:
 }
 
 int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) {
-    // std::cout << __func__ << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << std::endl;
 
     kassert(sock);
 
@@ -98,14 +98,14 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
     // Worker* w = dispatcher->get_stack()->get_worker();
     server = new RDMAConnectedSocketImpl(context, ib, dispatcher, dynamic_cast<RDMAWorker *>(w));
     if (!server->get_qp()) {
-        std::cout << __func__ << " server->qp is null" << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " server->qp is null" << std::endl;
         // cann't use delete server here, destructor will fail.
         server->cleanup();
         ::close(sd);
         return -1;
     }
     server->set_accept_fd(sd);
-    std::cout << __func__ << " accepted a new QP, tcp_fd: " << sd << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " accepted a new QP, tcp_fd: " << sd << std::endl;
     std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
     *sock = ConnectedSocket(std::move(csi));
 

@@ -20,14 +20,13 @@
     }
 inline std::string cpp_strerror(int err) {
     char buf[128];
-    char* errmsg;
+
+    char* errmsg = "Unknown error %d";
 
     if (err < 0) err = -err;
     std::ostringstream oss;
 
-    if (errmsg = strerror_r(err, buf, sizeof(buf))) {
-        errmsg = "Unknown error %d";
-    }
+    errmsg = strerror_r(err, buf, sizeof(buf));
     oss << "(" << err << ") " << errmsg;
 
     return oss.str();

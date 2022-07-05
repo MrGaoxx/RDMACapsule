@@ -208,7 +208,7 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocke
     r = ::bind(listen_sd, sa.get_sockaddr(), sa.get_sockaddr_len());
     if (r < 0) {
         r = -errno;
-        std::cout << __func__ << " unable to bind to " << sa.get_sockaddr() << ": " << cpp_strerror(r) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " unable to bind to " << sa.get_sockaddr() << ": " << cpp_strerror(r) << std::endl;
         ::close(listen_sd);
         return r;
     }
@@ -216,7 +216,7 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt, ServerSocke
     r = ::listen(listen_sd, context->m_rdma_config_->m_tcp_listen_backlog_);
     if (r < 0) {
         r = -errno;
-        std::cout << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " unable to listen on " << sa << ": " << cpp_strerror(r) << std::endl;
         ::close(listen_sd);
         return r;
     }

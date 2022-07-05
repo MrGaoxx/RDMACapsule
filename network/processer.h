@@ -18,9 +18,14 @@ class Processor {
     Processor(Server *server, Worker *w, Context *c, NetworkStack *stack);
     ~Processor() { delete listen_handler; };
 
-    void stop();
-    int bind(const entity_addr_t &bind_addr, entity_addr_t *bound_addrs);
     void start();
+    void stop();
+    bool is_running() { return is_started; }
+    int bind(const entity_addr_t &bind_addr, entity_addr_t *bound_addrs);
+
     void accept();
+
+   private:
+    bool is_started = false;
 };
 #endif
