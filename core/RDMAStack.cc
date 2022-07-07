@@ -104,7 +104,6 @@ void RDMADispatcher::polling_stop() {
 }
 
 void RDMADispatcher::handle_async_event() {
-    std::cout << typeid(this).name() << " : " << __func__ << std::endl;
     while (1) {
         ibv_async_event async_event;
         if (ibv_get_async_event(ib->get_device()->get_context(), &async_event)) {

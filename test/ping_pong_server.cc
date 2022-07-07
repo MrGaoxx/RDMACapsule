@@ -70,7 +70,11 @@ int RDMAPingPongServer::Listen() {
 void RDMAPingPongServer::Poll() {
     while (true) {
         int rs = server.Read(server_addr, recv_buffer[pos], kRequestSize);
-        if (unlikely(rs != -EAGAIN)) {
+        if (likely(rs <= 0)) {
+            if (rs != -EAGAIN && rs != -104) {
+                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
+            }
+        } else {
             if (unlikely(rs != kRequestSize)) {
                 std::cout << "!!! read the recv buffer of size:[" << rs << "] expected:[" << kRequestSize << "]" << std::endl;
             }

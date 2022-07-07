@@ -60,8 +60,9 @@ class C_handle_notify : public EventCallback {
         do {
             r = read(fd_or_id, c, sizeof(c));
             if (r < 0) {
-                if (errno != EAGAIN)
+                if (errno != EAGAIN) {
                     std::cout << typeid(this).name() << " : " << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << std::endl;
+                }
             }
         } while (r > 0);
     }

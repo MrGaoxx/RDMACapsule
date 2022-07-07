@@ -239,9 +239,9 @@ void RDMAConnectedSocketImpl::handle_connection() {
 ssize_t RDMAConnectedSocketImpl::read(char *buf, size_t len) {
     eventfd_t event_val = 0;
     int r = eventfd_read(notify_fd, &event_val);
-    std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
 
-    if (r == -1) {
+    if (r == -1 && errno != EAGAIN) {
         std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
         std::cout << "READ fd FAILED: " << cpp_strerror(errno) << std::endl;
     }
@@ -327,7 +327,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
     }
 
     buffers.erase(buffers.begin(), pchunk);
-    std::cout << typeid(this).name() << " : " << __func__ << " got " << read_size << " bytes, buffers size: " << buffers.size() << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " got " << read_size << " bytes, buffers size: " << buffers.size() << std::endl;
     worker->perf_logger->inc(l_msgr_rdma_rx_bytes, read_size);
     return read_size;
 }
@@ -400,34 +400,39 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
     auto copy_start = it;
     size_t total_copied = 0, wait_copy_len = 0;
     while (it != pending_bl.get_end()) {
-        if (ib->is_tx_buffer(static_cast<const char *>(it->get_buffer()))) {
-            if (wait_copy_len) {
-                size_t copied = tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
-                total_copied += copied;
-                if (copied < wait_copy_len) goto sending;
-                wait_copy_len = 0;
-            }
-            kassert(copy_start == it);
-            tx_buffers.push_back(ib->get_tx_chunk_by_buffer(static_cast<const char *>(it->get_buffer())));
-            total_copied += it->get_len();
-            ++copy_start;
-        } else {
-            wait_copy_len += it->get_len();
-        }
+        kassert(ib->is_tx_buffer(static_cast<const char *>(it->get_buffer())));
+        // if (ib->is_tx_buffer(static_cast<const char *>(it->get_buffer()))) {
+        kassert(wait_copy_len == 0);
+        /*
+        if (unlikely(wait_copy_len)) {
+            std::cout << __func__ << " the buffer is not a registerred buffer, geting" << std::endl;
+            size_t copied = tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
+            total_copied += copied;
+            if (copied < wait_copy_len) goto sending;
+            wait_copy_len = 0;
+        }*/
+        kassert(copy_start == it);
+        tx_buffers.push_back(ib->get_tx_chunk_by_buffer(static_cast<const char *>(it->get_buffer())));
+        total_copied += it->get_len();
+        ++copy_start;
+        /*}
+         else {
+             wait_copy_len += it->get_len();
+         }
+         */
         ++it;
     }
-    if (wait_copy_len) total_copied += tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
-
-sending:
-    if (total_copied == 0) return -EAGAIN;
-    kassert(total_copied <= pending_bl.get_len());
-    BufferList swapped;
-    if (total_copied < pending_bl.get_len()) {
-        worker->perf_logger->inc(l_msgr_rdma_tx_parital_mem);
-        pending_bl.Move(total_copied);
-    } else {
-        pending_bl.Clear();
+    kassert(wait_copy_len == 0);
+    /*
+    if (unlikely(wait_copy_len)) {
+        total_copied += tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
     }
+    */
+sending:
+
+    if (total_copied == 0) return -EAGAIN;
+    // kassert(total_copied == pending_bl.get_len());
+    pending_bl.Clear();
 
     std::cout << typeid(this).name() << " : " << __func__ << " left bytes: " << pending_bl.get_len() << " in buffers " << pending_bl.GetSize()
               << " tx chunks " << tx_buffers.size() << std::endl;
@@ -440,7 +445,7 @@ sending:
 }
 
 int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers) {
-    std::cout << typeid(this).name() << " : " << __func__ << " QP: " << local_qpn << " " << tx_buffers[0] << std::endl;
+    std::cout << typeid(this).name() << " : " << __func__ << " QP: " << local_qpn << " numchunks: " << tx_buffers.size() << std::endl;
     auto current_buffer = tx_buffers.begin();
     ibv_sge isge[tx_buffers.size()];
     uint32_t current_sge = 0;

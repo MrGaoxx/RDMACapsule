@@ -82,8 +82,10 @@ void RDMAPingPongClient::Send() {
         kassert(buffers.size() == RDMAPingPongClient::kNumRequest);
         BufferList bl;
         for (auto& chunk : buffers) {
-            memcpy(reinterpret_cast<void*>(chunk->buffer), reinterpret_cast<void*>(const_cast<char*>(prefix)), size_prefix);
-            *(chunk->buffer + size_prefix) = i;
+            for (int j = 0; j < kRequestSize / (size_prefix + sizeof(i)); j++) {
+                chunk->write(const_cast<char*>(prefix), size_prefix);
+                chunk->write(reinterpret_cast<char*>(&i), sizeof(i));
+            }
             i++;
             Buffer buf(chunk->buffer, chunk->bytes);
             bl.Append(buf);

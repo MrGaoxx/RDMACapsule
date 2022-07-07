@@ -592,7 +592,7 @@ int Infiniband::CompletionQueue::init() {
 }
 
 int Infiniband::CompletionQueue::rearm_notify(bool solicite_only) {
-    std::cout << typeid(this).name() << " : " << __func__ << " started." << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " started." << std::endl;
     int r = ibv_req_notify_cq(cq, 0);
     if (r < 0) std::cout << typeid(this).name() << " : " << __func__ << " failed to notify cq: " << cpp_strerror(errno) << std::endl;
     return r;
@@ -707,6 +707,7 @@ void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk *> &ck) {
 
 int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk *> &chunks, size_t block_size) {
     std::lock_guard<std::mutex> l{lock};
+    // krayecho: this is a fluky calculation
     uint32_t chunk_buffer_number = (block_size + buffer_size - 1) / buffer_size;
     chunk_buffer_number = free_chunks.size() < chunk_buffer_number ? free_chunks.size() : chunk_buffer_number;
     uint32_t r = 0;

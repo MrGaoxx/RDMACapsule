@@ -68,13 +68,13 @@ class BufferList {
         while (size && !buffer_list.empty()) {
             uint32_t pre_size = size;
             size = buffer_list.front().Move(size);
-            kassert(len > size - pre_size);
-            len -= size - pre_size;
-            if (size) {
-                kassert(0 == buffer_list.front().GetRemainingLen());
+            kassert(len > pre_size - size);
+            len -= pre_size - size;
+            if (buffer_list.front().GetRemainingLen() == 0) {
                 buffer_list.pop_front();
             }
         }
+        return size;
     };
 
     uint32_t GetSize() { return buffer_list.size(); }
@@ -92,6 +92,10 @@ class BufferList {
     }
 
     using BufferIterator = std::list<Buffer>::iterator;
+
+    BufferIterator get_begin() { return buffer_list.begin(); }
+    BufferIterator get_end() { return buffer_list.end(); }
+    /*
     BufferIterator&& get_begin() {
         auto rval = buffer_list.begin();
         return std::forward<BufferIterator>(rval);
@@ -100,6 +104,7 @@ class BufferList {
         auto rval = buffer_list.end();
         return std::forward<BufferIterator>(rval);
     }
+    */
     void Clear() { buffer_list.clear(); }
     std::list<Buffer>& GetBufferList() { return buffer_list; }
 
