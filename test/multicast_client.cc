@@ -15,7 +15,7 @@ class RDMAPingPongClient {
     RDMAPingPongClient(std::string& configFileName);
     void Init();
     Connection* Connect(const char* serverAddr);
-    void Send(Connection*);
+    void Send();
 
    private:
     uint32_t send_iterations = 10000;
@@ -24,7 +24,7 @@ class RDMAPingPongClient {
 
     int GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size);
 
-    std::function<void(Connection*)> send_call;
+    std::function<void(void)> send_call;
     Config* rdma_config;
     Context* context;
     Server server;
@@ -39,15 +39,27 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
       server(context),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
-    send_call = std::bind(&RDMAPingPongClient::Send, this, nullptr);
+    send_call = std::bind(&RDMAPingPongClient::Send, this);
     server.conn_write_callback = &send_call;
 }
 
 void RDMAPingPongClient::Init() { server.start(); }
 
 Connection* RDMAPingPongClient::Connect(const char* serverAddr) {
-    client_addr.set_addr(rdma_config->m_ip_addr.c_str(), rdma_config->m_listen_port);
-    server_addr.set_addr(serverAddr, rdma_config->m_listen_port);
+    client_addr.set_family(AF_INET);
+    sockaddr_in client_socket_addr;
+    inet_pton(AF_INET, rdma_config->m_ip_addr.c_str(), &client_socket_addr.sin_addr);
+    client_socket_addr.sin_family = AF_INET;
+    client_socket_addr.sin_port = rdma_config->m_listen_port;
+    client_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&client_socket_addr));
+
+    server_addr.set_family(AF_INET);
+    sockaddr_in server_sock_addr;
+    inet_pton(AF_INET, serverAddr, &server_sock_addr.sin_addr);
+    server_sock_addr.sin_family = AF_INET;
+    server_sock_addr.sin_port = rdma_config->m_listen_port;
+    server_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&server_sock_addr));
+
     std::cout << typeid(this).name() << " : " << __func__ << server_addr << std::endl;
     conn == server.create_connect(server_addr);
     return conn;
@@ -59,7 +71,7 @@ int RDMAPingPongClient::GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*
     return 0;
 }
 
-void RDMAPingPongClient::Send(Connection*) {
+void RDMAPingPongClient::Send() {
     const char* prefix = "this is the test of iteration";
     int size_prefix = strlen(prefix);
 

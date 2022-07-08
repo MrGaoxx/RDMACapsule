@@ -44,7 +44,7 @@ RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
       pos(0),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
-    poll_call = std::bind(&RDMAPingPongServer::Poll, this, nullptr);
+    poll_call = std::bind(&RDMAPingPongServer::Poll, this, _1);
     server.conn_read_callback = &poll_call;
 }
 RDMAPingPongServer::~RDMAPingPongServer() {
@@ -56,18 +56,11 @@ int RDMAPingPongServer::Listen() {
     if (unlikely(listening)) {
         return -EBUSY;
     }
-
-    server_addr.set_family(AF_INET);
-    sockaddr_in sa;
-    inet_pton(AF_INET, rdma_config->m_ip_addr.c_str(), &sa.sin_addr);
-    sa.sin_family = AF_INET;
-    sa.sin_port = rdma_config->m_listen_port;
-    server_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&sa));
-
+    server_addr.set_addr(rdma_config->m_ip_addr.c_str(), rdma_config->m_listen_port);
     std::cout << "SERVER:: listening on the addr" << server_addr << std::endl;
     return server.bind(server_addr);
 }
-void RDMAPingPongServer::Poll(Connection*) {
+void RDMAPingPongServer::Poll() {
     while (true) {
         int rs = server.Read(server_addr, recv_buffer[pos], kRequestSize);
         if (likely(rs <= 0)) {
