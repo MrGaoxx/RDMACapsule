@@ -1,6 +1,6 @@
 
 #include <ifaddrs.h>
-#include <linux/errno.h>
+#include <cerrno>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 
@@ -61,7 +61,7 @@ int RDMAPingPongServer::Listen() {
     sockaddr_in sa;
     inet_pton(AF_INET, rdma_config->m_ip_addr.c_str(), &sa.sin_addr);
     sa.sin_family = AF_INET;
-    sa.sin_port = rdma_config->m_listen_port;
+    sa.sin_port = htons(rdma_config->m_listen_port);
     server_addr.set_sockaddr(reinterpret_cast<const sockaddr*>(&sa));
 
     std::cout << "SERVER:: listening on the addr" << server_addr << std::endl;

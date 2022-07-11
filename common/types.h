@@ -15,13 +15,17 @@
 #ifndef NETWORK_TYPES_H
 #define NETWORK_TYPES_H
 
+#include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <vector>
+#include <cerrno>
 
 #define MAX_PORT_NUMBER 65535
 
@@ -68,6 +72,22 @@ struct entity_addr_t {
     entity_addr_t() : type(TYPE_DEFAULT), nonce(0) { memset(&u, 0, sizeof(u)); }
     entity_addr_t(type_t _type, uint32_t _nonce) : type(_type), nonce(_nonce) { memset(&u, 0, sizeof(u)); }
 
+    entity_addr_t(const char* ip, uint16_t port) {
+        set_family(AF_INET);
+        sockaddr_in socket_addr;
+        inet_pton(AF_INET, ip, &socket_addr.sin_addr);
+        socket_addr.sin_family = AF_INET;
+        socket_addr.sin_port = port;
+        set_sockaddr(reinterpret_cast<const sockaddr*>(&socket_addr));
+    }
+    void set_addr(const char* ip, uint16_t port) {
+        set_family(AF_INET);
+        sockaddr_in socket_addr;
+        inet_pton(AF_INET, ip, &socket_addr.sin_addr);
+        socket_addr.sin_family = AF_INET;
+        socket_addr.sin_port = htons(port);
+        set_sockaddr(reinterpret_cast<const sockaddr*>(&socket_addr));
+    }
     type_t get_type() const { return type; }
     void set_type(type_t t) { type = t; }
     bool is_any() const { return type == type_t::TYPE_ANY; }

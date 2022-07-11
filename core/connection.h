@@ -45,8 +45,8 @@ class Connection {
     void cleanup();
     const entity_addr_t &get_local_addr() const { return local_addr; }
 
-    std::function<void(void)> *read_callback;
-    std::function<void(void)> *write_callback;
+    std::function<void(Connection *)> *read_callback;
+    std::function<void(Connection *)> *write_callback;
 
    private:
     NetworkStack *stack;

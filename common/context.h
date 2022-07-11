@@ -3,7 +3,7 @@
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
-#include <linux/errno.h>
+#include <cerrno>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <stdio.h>
@@ -24,10 +24,12 @@ class PerfCountersCollection;
 class MulticastConnectGroup;
 #endif
 
-struct RDMAConfig {
-    RDMAConfig(std::string& filename);
-    RDMAConfig(std::string& rdma_device_name, uint8_t gid_index, uint8_t rdma_port_num)
-        : m_rdma_device_name_(rdma_device_name), m_gid_index_(gid_index), m_rdma_port_num_(rdma_port_num){};
+struct Config {
+    Config(std::string& filename);
+    Config(std::string& rdma_device_name, uint8_t gid_index, uint8_t rdma_port_num)
+        : m_use_rdma_(true), m_rdma_device_name_(rdma_device_name), m_gid_index_(gid_index), m_rdma_port_num_(rdma_port_num){};
+
+    bool m_use_rdma_ = true;
 
     bool m_use_rdma_cm_ = false;
     bool m_rdma_enable_hugepage_ = false;
@@ -67,7 +69,7 @@ struct RDMAConfig {
     void parse(std::string& key, std::string& val);
 };
 
-inline RDMAConfig::RDMAConfig(std::string& filename) {
+inline Config::Config(std::string& filename) {
     std::fstream configFile;
     configFile.open(filename, std::ios_base::app | std::ios_base::in);
     if (!configFile.is_open()) {
@@ -83,8 +85,15 @@ inline RDMAConfig::RDMAConfig(std::string& filename) {
     configFile.close();
 }
 
-inline void RDMAConfig::parse(std::string& key, std::string& val) {
-    if (key == "RDMA_CM") {
+inline void Config::parse(std::string& key, std::string& val) {
+    if (key == "USE_RDMA") {
+        if (val == "true") {
+            m_use_rdma_ = true;
+        } else {
+            m_use_rdma_ = false;
+        }
+        std::cout << " use_rdma_ = " << m_use_rdma_ << std::endl;
+    } else if (key == "RDMA_CM") {
         if (val == "true") {
             m_use_rdma_cm_ = true;
         } else {
@@ -120,7 +129,7 @@ inline void RDMAConfig::parse(std::string& key, std::string& val) {
         std::cout << " ip_addr = " << m_ip_addr << std::endl;
     } else if (key == "LISTEN_PORT") {
         m_listen_port = static_cast<uint16_t>(std::stoi(val));
-        m_addr.u.sin.sin_port = m_listen_port;
+        m_addr.u.sin.sin_port = htons(m_listen_port);
         std::cout << " listen_port = " << m_listen_port << std::endl;
     } else if (key == "RDMA_DEVICE_NAME") {
         m_rdma_device_name_ = val;
@@ -133,13 +142,13 @@ inline void RDMAConfig::parse(std::string& key, std::string& val) {
 }
 
 struct Context {
-    Context(std::string& config_file) : m_rdma_config_(new RDMAConfig(config_file)), m_counter_collection_(this), m_associateCenters(){};
-    Context(RDMAConfig* config_) : m_rdma_config_(config_), m_counter_collection_(this){};
+    Context(std::string& config_file) : m_rdma_config_(new Config(config_file)), m_counter_collection_(this), m_associateCenters(){};
+    Context(Config* config_) : m_rdma_config_(config_), m_counter_collection_(this){};
     ~Context() { delete m_rdma_config_; }
 
     common::PerfCounter::PerfCountersCollection* get_perfcounters_collection() { return &m_counter_collection_; }
 
-    RDMAConfig* m_rdma_config_;
+    Config* m_rdma_config_;
     common::PerfCounter::PerfCountersCollection m_counter_collection_;
     EventCenter::AssociatedCenters m_associateCenters;
 };

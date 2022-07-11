@@ -1,6 +1,6 @@
 
 #include <ifaddrs.h>
-#include <linux/errno.h>
+#include <cerrno>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 

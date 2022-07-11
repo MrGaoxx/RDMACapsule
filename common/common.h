@@ -1,7 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include <asm/errno.h>
+#include <cerrno>
 
 #include <atomic>
 #include <cstring>

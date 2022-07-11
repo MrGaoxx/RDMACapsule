@@ -42,7 +42,7 @@ class C_read_callback : public EventCallback {
 
    public:
     explicit C_read_callback(Connection *c) : conn(c) {}
-    void do_request(uint64_t fd) override { (*conn->read_callback)(); }
+    void do_request(uint64_t fd) override { (*conn->read_callback)(conn); }
 };
 
 class C_write_callback : public EventCallback {
@@ -50,7 +50,7 @@ class C_write_callback : public EventCallback {
 
    public:
     explicit C_write_callback(Connection *c) : conn(c) {}
-    void do_request(uint64_t fd) override { (*conn->write_callback)(); }
+    void do_request(uint64_t fd) override { (*conn->write_callback)(conn); }
 };
 
 Connection::Connection(Context *context, Server *s, Worker *w)

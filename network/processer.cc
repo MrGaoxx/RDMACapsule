@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "core/server.h"
+#include <errno.h>
 
 class Processor::C_processor_accept : public EventCallback {
     Processor* pro;

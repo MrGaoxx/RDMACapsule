@@ -19,6 +19,7 @@
 #include "common/common.h"
 #include "common/context.h"
 #include "common/types.h"
+
 namespace Network {
 class NetHandler {
    public:
