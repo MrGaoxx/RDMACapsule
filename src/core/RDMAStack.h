@@ -161,6 +161,10 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     typedef Infiniband::MemoryManager::Chunk Chunk;
     typedef Infiniband::CompletionChannel CompletionChannel;
     typedef Infiniband::CompletionQueue CompletionQueue;
+    ssize_t write(char *buf, ssize_t) override {
+        std::cout << __func__ << "does not have this implementation" << std::endl;
+        assert(false);
+    }
 
    protected:
     Context *context;

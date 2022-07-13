@@ -36,7 +36,26 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
    public:
     explicit PosixConnectedSocketImpl(const entity_addr_t &sa, int f, bool connected) : _fd(f), sa(sa), connected(connected) {}
-
+    ssize_t write(char *buf, ssize_t size) override {
+        size_t sent = 0;
+        do {
+            ssize_t r;
+            r = ::send(_fd, &buf, size, MSG_NOSIGNAL);
+            if (r < 0) {
+                int err = errno;
+                if (err == EINTR) {
+                    continue;
+                } else if (err == EAGAIN) {
+                    break;
+                }
+                return -err;
+            }
+            sent += r;
+            buf += r;
+            size = size - r;
+        } while (size > 0);
+        return (ssize_t)sent;
+    };
     int is_connected() override {
         if (connected) return 1;
 
@@ -133,6 +152,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
         return static_cast<ssize_t>(sent_bytes);
     }
+
     void shutdown() override { ::shutdown(_fd, SHUT_RDWR); }
     void close() override { ::close(_fd); }
     int fd() const override { return _fd; }

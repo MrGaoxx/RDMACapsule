@@ -23,7 +23,14 @@ class Connection {
         kassert(center->in_thread());
         return cs.send(bl, false);
     }
+
+    ssize_t write(char *buf, size_t size) { return cs.write(buf, size); }
+
     ssize_t Read(char *buf, size_t n) { return cs.read(buf, n); }
+
+    uint32_t mc_id;
+    void set_mc_id(uint32_t mc_id_) { mc_id = mc_id_; }
+    uint32_t get_mc_id() { return mc_id; }
 
    private:
     enum { STATE_NONE, STATE_CONNECTING, STATE_CONNECTING_RE, STATE_ACCEPTING, STATE_CONNECTION_ESTABLISHED, STATE_CLOSED };
@@ -44,6 +51,8 @@ class Connection {
     void stop(bool queue_reset);
     void cleanup();
     const entity_addr_t &get_local_addr() const { return local_addr; }
+
+    std::mutex &get_write_lock() { return write_lock; }
 
     std::function<void(Connection *)> *read_callback;
     std::function<void(Connection *)> *write_callback;

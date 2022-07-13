@@ -30,6 +30,7 @@ class ConnectedSocketImpl {
     virtual int is_connected() = 0;
     virtual ssize_t read(char *, size_t) = 0;
     virtual ssize_t send(BufferList &bl, bool more) = 0;
+    virtual ssize_t write(char *buf, ssize_t size) = 0;
     virtual void shutdown() = 0;
     virtual void close() = 0;
     virtual int fd() const = 0;
@@ -92,6 +93,7 @@ class ConnectedSocket {
     ssize_t send(BufferList &bl, bool more) { return _csi->send(bl, more); }
     /// Disables output to the socket.
     ///
+    ssize_t write(char *buf, size_t size) { return _csi->write(buf, size); }
     /// Current or future writes that have not been successfully flushed
     /// will immediately fail with an error.  This is useful to abort
     /// operations on a socket that is not making progress due to a

@@ -40,7 +40,7 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
     send_call = std::bind(&RDMAPingPongClient::Send, this, nullptr);
-    server.conn_write_callback = &send_call;
+    server.conn_write_callback_p = &send_call;
 }
 
 void RDMAPingPongClient::Init() { server.start(); }

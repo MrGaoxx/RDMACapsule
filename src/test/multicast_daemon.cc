@@ -1,16 +1,16 @@
 
 #include <ifaddrs.h>
-#include <cerrno>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 
+#include <cerrno>
 #include <functional>
 
 #include "RDMAStack.h"
 #include "common.h"
 #include "common/context.h"
 #include "core/Infiniband.h"
-#include "core/server.h"
+#include "multicast/multicast.h"
 
 class MulticastDaemonApp {
    public:
@@ -52,7 +52,7 @@ int MulticastDaemonApp::Listen() {
     }
 
     server_addr.set_addr(config->m_ip_addr.c_str(), config->m_listen_port);
-    std::cout << "SERVER:: listening on the addr" << server_addr << std::endl;
+    std::cout << "MCDAEMON:: listening on the addr" << server_addr << std::endl;
     return mc_daemon.bind(server_addr);
 }
 

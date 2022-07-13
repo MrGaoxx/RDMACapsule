@@ -27,7 +27,6 @@
 
 static const uint32_t MAX_SHARED_RX_SGE_COUNT = 1;
 static const uint32_t MAX_INLINE_DATA = 0;
-static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
 static const uint32_t CQ_DEPTH = 30000;
 
 Port::Port(Context *context, struct ibv_context *ictxt, uint8_t ipn) : ctxt(ictxt), port_num(ipn), gid_idx(context->m_rdma_config_->m_gid_index_) {
@@ -159,7 +158,7 @@ Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type
       local_cm_meta{0},
       txcq(txcq),
       rxcq(rxcq),
-      initial_psn(lrand48() & PSN_MSK),
+      initial_psn(0 & PSN_MSK),
       // One extra WR for beacon
       max_send_wr(tx_queue_len + 1),
       max_recv_wr(rx_queue_len),

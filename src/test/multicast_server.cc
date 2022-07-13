@@ -44,7 +44,7 @@ RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
       pos(0),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
-    poll_call = std::bind(&RDMAPingPongServer::Poll, this, _1);
+    poll_call = std::bind(&RDMAPingPongServer::Poll, this, nullptr);
     server.conn_read_callback = &poll_call;
 }
 RDMAPingPongServer::~RDMAPingPongServer() {

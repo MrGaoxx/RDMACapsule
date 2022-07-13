@@ -1,9 +1,9 @@
 
 #include <ifaddrs.h>
-#include <cerrno>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 
+#include <cerrno>
 #include <functional>
 
 #include "RDMAStack.h"
@@ -45,7 +45,7 @@ RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
     poll_call = std::bind(&RDMAPingPongServer::Poll, this, nullptr);
-    server.conn_read_callback = &poll_call;
+    server.conn_read_callback_p = &poll_call;
 }
 RDMAPingPongServer::~RDMAPingPongServer() {
     delete rdma_config;

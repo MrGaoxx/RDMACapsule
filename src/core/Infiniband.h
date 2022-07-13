@@ -31,6 +31,8 @@
 #include "common/perf_counters.h"
 #include "network/net_handler.h"
 
+static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
+
 #define HUGE_PAGE_SIZE_2MB (2 * 1024 * 1024)
 #define ALIGN_TO_PAGE_2MB(x) (((x) + (HUGE_PAGE_SIZE_2MB - 1)) & ~(HUGE_PAGE_SIZE_2MB - 1))
 
@@ -491,7 +493,7 @@ class Infiniband {
          */
         int send_cm_meta(Context *context, int socket_fd);
         int recv_cm_meta(Context *context, int socket_fd);
-        void wire_gid_to_gid(const char *wgid, ib_cm_meta_t *cm_meta_data);
+        static void wire_gid_to_gid(const char *wgid, ib_cm_meta_t *cm_meta_data);
         void gid_to_wire_gid(const ib_cm_meta_t &cm_meta_data, char wgid[]);
         ibv_qp *get_qp() const { return qp; }
         Infiniband::CompletionQueue *get_tx_cq() const { return txcq; }

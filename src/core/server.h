@@ -1,5 +1,6 @@
 #ifndef CORE_SERVER_H
 #define CORE_SERVER_H
+#include "core/Infiniband.h"
 #include "core/connection.h"
 #include "network/processer.h"
 class RDMAStack;
@@ -27,36 +28,19 @@ class Server {
 
     virtual NetworkStack *get_network_stack() { return stack.get(); }
     virtual RDMAStack *get_rdma_stack() { return reinterpret_cast<RDMAStack *>(stack.get()); }
-    std::function<void(Connection *)> *conn_read_callback;
-    std::function<void(Connection *)> *conn_write_callback;
+    std::function<void(Connection *)> *conn_read_callback_p;
+    std::function<void(Connection *)> *conn_write_callback_p;
 
    protected:
     std::shared_ptr<NetworkStack> stack;
     std::vector<Processor *> processors;
     std::unordered_map<entity_addr_t, Connection *> conns;
     std::set<Connection *> accepting_conns;
+
     Context *context;
 
     std::mutex lock;
     int conn_count;
-};
-
-class MulticastDaemon : public Server {
-   public:
-    MulticastDaemon(Context *context);
-    ~MulticastDaemon();
-
-    // int bind(const entity_addr_t &bind_addr);
-    void accept(Worker *w, ConnectedSocket cli_socket, const entity_addr_t &listen_addr, const entity_addr_t &peer_addr) override;
-
-    std::function<void(Connection *)> *conn_read_callback;
-    std::function<void(Connection *)> *conn_write_callback;
-
-   private:
-    static const int kNumMulticasts = 2;
-    std::unordered_map<entity_addr_t, std::array<entity_addr_t, kNumMulticasts>> multicast_addrs;
-    void process_client_read(Connection *);
-    void process_server_read(Connection *);
 };
 
 #endif
