@@ -92,6 +92,45 @@ uint32_t SwitchTableWritter::multicast_group_add(uint32_t src_addr, uint32_t dqp
     return mcg_id;
 }
 
+uint32_t SwitchTableWritter::multicast_group_add(uint32_t src_addr, uint32_t dqp_num, uint32_t sqp_num, uint32_t dst_addr1, uint32_t dqp1, uint32_t dst_addr2, uint32_t dqp2){
+    int success=-1;
+    uint32_t mcg_id;
+
+    mcg_id = allocate_multicast_group_id();
+    if (Py_IsInitialized())
+    {
+        PyObject* pModule = NULL;
+        PyObject* pFunc = NULL;
+        pModule = PyImport_ImportModule("control_plane_funcs");  //参数为Python脚本的文件名v
+        if (pModule)
+        {
+            PyObject* pArgs = PyTuple_New(8);//函数调用的参数传递均是以元组的形式打包的,2表示参数个数。如果AdditionFc中只有一个参数时，写1就可以了。这里只先介绍函数必须有参数存在的情况。
+            PyTuple_SetItem(pArgs, 0, Py_BuildValue("I", mcg_id)); //0：表示序号。第一个参数。
+            PyTuple_SetItem(pArgs, 1, Py_BuildValue("I", src_addr)); //0：表示序号。第一个参数。
+            PyTuple_SetItem(pArgs, 2, Py_BuildValue("I", dqp_num));
+            PyTuple_SetItem(pArgs, 3, Py_BuildValue("I", sqp_num));
+            PyTuple_SetItem(pArgs, 4, Py_BuildValue("I", dst_addr1));
+            PyTuple_SetItem(pArgs, 5, Py_BuildValue("I", dqp1));
+            PyTuple_SetItem(pArgs, 6, Py_BuildValue("I", dst_addr2));
+            PyTuple_SetItem(pArgs, 7, Py_BuildValue("I", dqp2));
+
+            pFunc = PyObject_GetAttrString(pModule, "multicast_group_table_2_add");   //获取函数
+            PyEval_CallObject(pFunc, pArgs);           //执行函数
+            success = 1;
+        }
+        else
+        {
+            printf("导入Python模块失败...\n");
+        }
+    }
+    else
+    {
+        printf("Python环境初始化失败...\n");
+    }
+
+    // Py_Finalize();
+    return mcg_id;
+}
 
 int SwitchTableWritter::multicast_group_del(uint32_t mcg_id, uint32_t src_addr, uint32_t dqp_num){
     int success=-1;
