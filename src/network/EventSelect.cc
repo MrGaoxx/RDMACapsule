@@ -46,7 +46,7 @@ int SelectDriver::add_event(int fd, int cur_mask, int add_mask) {
 }
 
 int SelectDriver::del_event(int fd, int cur_mask, int delmask) {
-    std::cout << typeid(this).name() << " : " << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask << std::endl;
 
     if (delmask & EVENT_READABLE) FD_CLR(fd, &rfds);
     if (delmask & EVENT_WRITABLE) FD_CLR(fd, &wfds);

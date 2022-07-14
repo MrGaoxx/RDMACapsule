@@ -71,7 +71,8 @@ void Connection::connect(const entity_addr_t &addr) {
 
 void Connection::process() {
     std::lock_guard<std::mutex> l(lock);
-    std::cout << typeid(this).name() << " : " << __func__ << std::endl;
+    std::cout << typeid(this).name() << this << " cm_id:" << mc_id << " peer_addr " << peer_addr << " : " << __func__ << " state: " << state
+              << std::endl;
 
     switch (state) {
         case STATE_NONE: {
@@ -127,6 +128,7 @@ void Connection::process() {
         case STATE_ACCEPTING: {
             center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
             state = STATE_CONNECTION_ESTABLISHED;
+
             center->dispatch_event_external(read_callback_handler);
             break;
         }

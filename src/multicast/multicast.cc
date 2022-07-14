@@ -8,7 +8,12 @@ MulticastDaemon::MulticastDaemon(Context *c) : Server(c) {
 
     mc_client_conn_read_callback = std::bind(&MulticastDaemon::process_client_read, this, std::placeholders::_1);
     mc_server_conn_read_callback = std::bind(&MulticastDaemon::process_server_read, this, std::placeholders::_1);
-    mc_conn_write_callback = std::bind(&MulticastDaemon::process_write, this, std::placeholders::_1);
+    mc_server_conn_write_callback = std::bind(&MulticastDaemon::handle_server_established, this, std::placeholders::_1);
+    {
+        std::cout << "Switch address is " << p4_writter.get_switch_addr() << std::endl;
+
+        p4_writter.init_switch_table();
+    }
 }
 MulticastDaemon::~MulticastDaemon() {}
 
@@ -20,13 +25,16 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
     accepting_conn->accept(std::move(cli_socket), listen_addr, peer_addr);
     accepting_conns.insert(accepting_conn);
     accepting_conn->read_callback = &mc_client_conn_read_callback;
-    accepting_conn->write_callback = &mc_conn_write_callback;
+    // accepting_conn->write_callback = &mc_conn_write_callback;
 
     std::lock_guard data{data_lock};
     // kassert(multicast_connections.count(mc_id) == 0);
     accepting_conn->set_mc_id(mc_id);
-    multicast_connections[mc_id] = std::array<Connection *, kNumMulticasts>();
+    multicast_connections[mc_id] = std::array<Connection *, kNumMulticasts + 1>();
+    multicast_connections[mc_id][0] = accepting_conn;
     multicast_state[mc_id] = MCState();
+    kassert(multicast_cm_meta.count(mc_id) == 0);
+    multicast_cm_meta[mc_id] = multicast_cm_meta_t();
     auto &mc_state = multicast_state[mc_id];
     // mc_state.client_state = MCState::ClientState::STATE_INIT;
 
@@ -40,11 +48,11 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
         Worker *w = stack->get_worker();
         auto new_conn = new Connection(context, this, w);
         new_conn->read_callback = &mc_server_conn_read_callback;
-        new_conn->write_callback = &mc_conn_write_callback;
+        new_conn->write_callback = &mc_server_conn_write_callback;
         new_conn->connect(target);
         conns[target] = new_conn;
         new_conn->set_mc_id(mc_id);
-        multicast_connections[mc_id][i] = new_conn;
+        multicast_connections[mc_id][i + 1] = new_conn;
         // mc_state.server_state[i] = MCState::ServerState::STATE_INIT;
     }
     // mc_state.client_state = MCState::ClientState::STATE_;
@@ -52,6 +60,7 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
 }
 
 void MulticastDaemon::process_client_read(Connection *conn) {
+    std::cout << __func__ << std::endl;
     char msg[TCP_MSG_LEN];
     int read_size = 0;
     {
@@ -70,10 +79,8 @@ void MulticastDaemon::process_client_read(Connection *conn) {
         std::lock_guard dl{data_lock};
 
         uint64_t mc_id = conn->get_mc_id();
-        // multicast_map[conn->get_peer_socket_addr()];
-        kassert(multicast_cm_meta.count(mc_id) == 0);
+
         auto &mc_state = multicast_state[mc_id];
-        multicast_cm_meta[mc_id] = multicast_cm_meta_t();
         auto &mc_cm_meta = multicast_cm_meta[mc_id];
         char temp_gid[33];
         sscanf(msg, "%hx:%x:%x:%x:%s", &(mc_cm_meta.sender_lid), &(mc_cm_meta.sender_local_qpn), &(mc_cm_meta.sender_psn),
@@ -90,12 +97,12 @@ void MulticastDaemon::process_client_read(Connection *conn) {
                 mc_state.client_state = MCState::ClientState::STATE_HANDSHAKE_RECEIVED;
                 // sending handshake to servers
                 for (int i = 0; i < kNumMulticasts; i++) {
-                    send_handshake_to_server(msg, mc_id, mc_cm_meta, mc_state, i);
-                    mc_state.server_state[i] = MCState::ServerState::STATE_HANDSHAKE_SENT;
+                    if (mc_state.server_state[i] == MCState::ServerState::STATE_CONNECTED) {
+                        send_handshake_to_server(mc_id, mc_cm_meta, mc_state, i);
+                        mc_state.server_state[i] = MCState::ServerState::STATE_HANDSHAKE_SENT;
+                        multicast_connections[mc_id][i + 1]->async_read();
+                    }
                 }
-                // sneding handshake to client
-                send_handshake_to_client(conn, msg, mc_id, mc_cm_meta, mc_state);
-                mc_state.client_state = MCState::ClientState::STATE_HANDSHAKE_SENT;
                 break;
             }
             case MCState::ClientState::STATE_HANDSHAKE_SENT: {
@@ -108,13 +115,14 @@ void MulticastDaemon::process_client_read(Connection *conn) {
             case MCState::ClientState::STATE_HANDSHAKE_RECEIVED:
             case MCState::ClientState::STATE_ACK_RECEIVED:
             default:
-                std::cout << __func__ << "error state when process client read, STATE: " << mc_state.client_state << std::endl;
+                std::cout << __func__ << " error state when process client read, STATE: " << mc_state.client_state << std::endl;
                 assert(false);
         }
     }
 }
 
 void MulticastDaemon::process_server_read(Connection *conn) {
+    std::cout << __func__ << std::endl;
     char msg[TCP_MSG_LEN];
     int read_size = 0;
     {
@@ -132,10 +140,8 @@ void MulticastDaemon::process_server_read(Connection *conn) {
     {
         std::lock_guard dl{data_lock};
         uint64_t mc_id = conn->get_mc_id();
-        kassert(multicast_cm_meta.count(mc_id) == 0);
         auto &mc_state = multicast_state[mc_id];
         int index = get_mc_index(mc_id, conn);
-        multicast_cm_meta[mc_id] = multicast_cm_meta_t();
         auto &mc_cm_meta = multicast_cm_meta[mc_id];
         char temp_gid[33];
         sscanf(msg, "%hx:%x:%x:%x:%s", &mc_cm_meta.receiver_lid[index], &mc_cm_meta.receiver_local_qpn[index], &(mc_cm_meta.receiver_psn[index]),
@@ -149,21 +155,43 @@ void MulticastDaemon::process_server_read(Connection *conn) {
                 break;
             case MCState::ServerState::STATE_HANDSHAKE_SENT: {
                 // sending handshake ACK to this servers
-                send_handshake_to_server(msg, mc_id, mc_cm_meta, mc_state, index);
+                send_handshake_to_server(mc_id, mc_cm_meta, mc_state, index);
                 mc_state.server_state[index] = MCState::ServerState::STATE_HANDSHAKE_ACK_SENT;
+                check_and_send_handshake_to_client(multicast_connections[mc_id][0], mc_id, mc_cm_meta, mc_state);
                 break;
             }
             default:
-                std::cout << __func__ << "error state when process client read, STATE: " << mc_state.client_state << std::endl;
+                std::cout << __func__ << "error state when process server read, STATE: " << mc_state.server_state[index] << std::endl;
                 assert(false);
         }
     }
 }
 
-void MulticastDaemon::send_handshake_to_client(Connection *conn, char *msg, mc_id_t mc_id, multicast_cm_meta_t &mc_cm_meta, MCState &mc_state) {
-    // std::cout << __func__ << std::endl;
+void MulticastDaemon::check_and_send_handshake_to_client(Connection *conn, mc_id_t mc_id, multicast_cm_meta_t &mc_cm_meta, MCState &mc_state) {
+    std::cout << __func__ << std::endl;
+    switch (mc_state.client_state) {
+        case MCState::ClientState::STATE_HANDSHAKE_RECEIVED:
+            break;
+        default:
+            std::cout << __func__ << " failed, client state: " << mc_state.client_state << std::endl;
+            return;
+    }
+
+    // int ready_to_send = false;
+    for (int i = 0; i < kNumMulticasts; i++) {
+        if (mc_state.server_state[i] != MCState::ServerState::STATE_HANDSHAKE_ACK_SENT) {
+            std::cout << __func__ << " failed, server state: " << mc_state.server_state[i] << std::endl;
+            return;
+        }
+    }
+
+    p4_writter.multicast_group_add(conn->get_local_addr().in4_addr().sin_addr.s_addr, mc_id, mc_cm_meta.sender_local_qpn,
+                                   multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr, mc_cm_meta.receiver_local_qpn[0],
+                                   multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr, mc_cm_meta.receiver_local_qpn[1]);
+
     int retry = 0;
     char temp_gid[33];
+    char msg[TCP_MSG_LEN];
     multicast_cm_meta_t::gid_to_wire_gid(&mc_cm_meta.sender_gid, temp_gid);
     sprintf(msg, "%04x:%08x:%08x:%08x:%s", mc_cm_meta.receiver_lid[0], mc_id, mc_cm_meta.sender_psn, mc_cm_meta.sender_local_qpn, temp_gid);
 
@@ -171,30 +199,35 @@ void MulticastDaemon::send_handshake_to_client(Connection *conn, char *msg, mc_i
     std::cout << typeid(this).name() << " : " << __func__ << " sending: " << mc_cm_meta.receiver_lid[0] << ", " << mc_id << ", "
               << mc_cm_meta.sender_psn << ", " << mc_cm_meta.sender_local_qpn << "," << temp_gid << std::endl;
 
-    std::lock_guard iol{conn->get_write_lock()};
-retry:
-    auto r = conn->write(msg, sizeof(msg));
-    if (unlikely((size_t)r != sizeof(msg))) {
-        // FIXME need to handle EAGAIN instead of retry
-        if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
-            retry++;
-            goto retry;
+    {
+        std::lock_guard iol{conn->get_write_lock()};
+    retry:
+        auto r = conn->write(msg, sizeof(msg));
+        if (unlikely((size_t)r != sizeof(msg))) {
+            // FIXME need to handle EAGAIN instead of retry
+            if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
+                retry++;
+                goto retry;
+            }
+            if (r < 0)
+                std::cout << typeid(this).name() << " : " << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << std::endl;
+            else
+                std::cout << typeid(this).name() << " : " << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << std::endl;
+            mc_state.client_state = MCState::ClientState::STATE_ERROR;
+            assert(false);
         }
-        if (r < 0)
-            std::cout << typeid(this).name() << " : " << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << std::endl;
-        else
-            std::cout << typeid(this).name() << " : " << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << std::endl;
-        mc_state.client_state = MCState::ClientState::STATE_ERROR;
-        assert(false);
     }
+    mc_state.client_state = MCState::ClientState::STATE_HANDSHAKE_SENT;
 };
 
-void MulticastDaemon::send_handshake_to_server(char *msg, mc_id_t mc_id, multicast_cm_meta_t &mc_cm_meta, MCState &mc_state, int i) {
+void MulticastDaemon::send_handshake_to_server(mc_id_t mc_id, multicast_cm_meta_t &mc_cm_meta, MCState &mc_state, int i) {
     std::cout << __func__ << std::endl;
-    Connection *conn = multicast_connections[mc_id][i];
+    Connection *conn = multicast_connections[mc_id][i + 1];
     int retry = 0;
     char temp_gid[33];
-    kassert(mc_state.server_state[i] == MCState::ServerState::STATE_INIT);
+    char msg[TCP_MSG_LEN];
+    kassert(mc_state.server_state[i] == MCState::ServerState::STATE_CONNECTED ||
+            mc_state.server_state[i] == MCState::ServerState::STATE_HANDSHAKE_SENT);
     multicast_cm_meta_t::gid_to_wire_gid(&mc_cm_meta.sender_gid, temp_gid);
     sprintf(msg, "%04x:%08x:%08x:%08x:%s", mc_cm_meta.sender_lid, mc_cm_meta.sender_peer_qpn, mc_cm_meta.sender_psn, mc_cm_meta.receiver_local_qpn[i],
             temp_gid);
@@ -203,20 +236,39 @@ void MulticastDaemon::send_handshake_to_server(char *msg, mc_id_t mc_id, multica
     std::cout << typeid(this).name() << " : " << __func__ << " sending: " << mc_cm_meta.sender_lid << ", " << mc_cm_meta.sender_peer_qpn << ", "
               << mc_cm_meta.sender_psn << ", " << mc_cm_meta.receiver_local_qpn[i] << ", " << temp_gid << std::endl;
 
-    std::lock_guard iol{conn->get_write_lock()};
-retry:
-    auto r = conn->write(msg, sizeof(msg));
-    if (unlikely((size_t)r != sizeof(msg))) {
-        // FIXME need to handle EAGAIN instead of retry
-        if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
-            retry++;
-            goto retry;
+    {
+        std::lock_guard iol{conn->get_write_lock()};
+    retry:
+        auto r = conn->write(msg, sizeof(msg));
+        if (unlikely((size_t)r != sizeof(msg))) {
+            // FIXME need to handle EAGAIN instead of retry
+            if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
+                retry++;
+                goto retry;
+            }
+            if (r < 0)
+                std::cout << typeid(this).name() << " : " << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << std::endl;
+            else
+                std::cout << typeid(this).name() << " : " << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << std::endl;
+            mc_state.server_state[i] = MCState::ServerState::STATE_ERROR;
+            assert(false);
         }
-        if (r < 0)
-            std::cout << typeid(this).name() << " : " << __func__ << " send returned error " << errno << ": " << cpp_strerror(errno) << std::endl;
-        else
-            std::cout << typeid(this).name() << " : " << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << std::endl;
-        mc_state.server_state[i] = MCState::ServerState::STATE_ERROR;
-        assert(false);
+    }
+}
+
+void MulticastDaemon::handle_server_established(Connection *conn) {
+    std::cout << __func__ << std::endl;
+    uint64_t mc_id = conn->get_mc_id();
+    auto &mc_state = multicast_state[mc_id];
+    int index = get_mc_index(mc_id, conn);
+    auto &mc_cm_meta = multicast_cm_meta[mc_id];
+    std::lock_guard dl{data_lock};
+    mc_state.server_state[index] = MCState::ServerState::STATE_CONNECTED;
+    if (mc_state.client_state == MCState::ClientState::STATE_HANDSHAKE_RECEIVED) {  // client msg befor connection established, sent here
+        send_handshake_to_server(mc_id, mc_cm_meta, mc_state, index);
+        mc_state.server_state[index] = MCState::ServerState::STATE_HANDSHAKE_SENT;
+        conn->async_read();
+    } else {
+        std::cout << mc_id << " conn " << index << " waiting client msg to send" << std::endl;
     }
 }

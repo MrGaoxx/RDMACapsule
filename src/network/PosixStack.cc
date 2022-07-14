@@ -40,7 +40,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
         size_t sent = 0;
         do {
             ssize_t r;
-            r = ::send(_fd, &buf, size, MSG_NOSIGNAL);
+            r = ::write(_fd, buf, size);
             if (r < 0) {
                 int err = errno;
                 if (err == EINTR) {
@@ -50,6 +50,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
                 }
                 return -err;
             }
+            // std::cout << __func__ << " " << r << " bytes" << std::endl;
             sent += r;
             buf += r;
             size = size - r;
