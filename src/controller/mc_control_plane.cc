@@ -46,25 +46,15 @@ int SwitchTableWritter::init_switch_table(){
     {
         printf("Python环境初始化失败...\n");
     }
-    // printf("结束py...\n");
-    // if (Py_IsInitialized())
-    // {
-    //     Py_Finalize();
-    // }
-    // printf("结束py成功...\n");
     
     return success;
 }
 
 uint32_t SwitchTableWritter::multicast_group_add(uint32_t src_addr, uint32_t dqp_num, uint32_t sqp_num, uint32_t dst_addr1, uint32_t dqp1, uint32_t dst_addr2, uint32_t dqp2, uint32_t dst_addr3, uint32_t dqp3){
-    Py_Initialize();    
     int success=-1;
     uint32_t mcg_id;
 
     mcg_id = allocate_multicast_group_id();
-    PyRun_SimpleString("print('python start')");
-    PyRun_SimpleString("import sys");
-    PyRun_SimpleString("sys.path.append('./')");
     if (Py_IsInitialized())
     {
         PyObject* pModule = NULL;
@@ -104,12 +94,8 @@ uint32_t SwitchTableWritter::multicast_group_add(uint32_t src_addr, uint32_t dqp
 
 
 int SwitchTableWritter::multicast_group_del(uint32_t mcg_id, uint32_t src_addr, uint32_t dqp_num){
-    Py_Initialize();    
     int success=-1;
 
-    PyRun_SimpleString("print('python start')");
-    PyRun_SimpleString("import sys");
-    PyRun_SimpleString("sys.path.append('./')");
     if (Py_IsInitialized())
     {
         PyObject* pModule = NULL;
@@ -159,32 +145,32 @@ void SwitchTableWritter::free_multicast_group_id(uint32_t mcg_id)
     mcg_id_used[mcg_id] = 0;
 }
 
-int main_py()
-{
-    Py_Initialize();    
+// int main_py()
+// {
+//     Py_Initialize();    
 
-    PyRun_SimpleString("print('Hello')");
-    PyRun_SimpleString("import sys");
-    PyRun_SimpleString("sys.path.append('./')");
-    if (Py_IsInitialized())
-    {
-        PyObject* pModule = NULL;
-        PyObject* pFunc = NULL;
-        pModule = PyImport_ImportModule("control_plane_funcs");  //参数为Python脚本的文件名v
-        if (pModule)
-        {
-            pFunc = PyObject_GetAttrString(pModule, "main_func");   //获取函数
-            PyEval_CallObject(pFunc, NULL);           //执行函数
-        }
-        else
-        {
-            printf("导入Python模块失败...\n");
-        }
-    }
-    else
-    {
-        printf("Python环境初始化失败...\n");
-    }
+//     PyRun_SimpleString("print('Hello')");
+//     PyRun_SimpleString("import sys");
+//     PyRun_SimpleString("sys.path.append('./')");
+//     if (Py_IsInitialized())
+//     {
+//         PyObject* pModule = NULL;
+//         PyObject* pFunc = NULL;
+//         pModule = PyImport_ImportModule("control_plane_funcs");  //参数为Python脚本的文件名v
+//         if (pModule)
+//         {
+//             pFunc = PyObject_GetAttrString(pModule, "main_func");   //获取函数
+//             PyEval_CallObject(pFunc, NULL);           //执行函数
+//         }
+//         else
+//         {
+//             printf("导入Python模块失败...\n");
+//         }
+//     }
+//     else
+//     {
+//         printf("Python环境初始化失败...\n");
+//     }
 
-    Py_Finalize();      
-}
+//     Py_Finalize();      
+// }
