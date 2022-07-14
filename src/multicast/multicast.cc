@@ -11,7 +11,6 @@ MulticastDaemon::MulticastDaemon(Context *c) : Server(c) {
     mc_server_conn_write_callback = std::bind(&MulticastDaemon::handle_server_established, this, std::placeholders::_1);
     {
         std::cout << "Switch address is " << p4_writter.get_switch_addr() << std::endl;
-
         p4_writter.init_switch_table();
     }
 }
