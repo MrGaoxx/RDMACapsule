@@ -119,7 +119,7 @@ int SwitchTableWritter::multicast_group_del(uint32_t mcg_id, uint32_t src_addr, 
     }
     else
     {
-        printf("Python环境初始化失败...\n");
+        printf("Python环境未初始化...\n");
     }
     free_multicast_group_id(mcg_id);
     // Py_Finalize();
