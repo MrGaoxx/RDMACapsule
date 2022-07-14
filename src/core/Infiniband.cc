@@ -389,7 +389,8 @@ int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
     } else if (r == 0) {  // valid disconnect message of length 0
         std::cout << typeid(this).name() << " : " << __func__ << " got disconnect message " << std::endl;
     } else if ((size_t)r != sizeof(msg)) {  // invalid message
-        std::cout << typeid(this).name() << " : " << __func__ << " got bad length (" << r << ") " << std::endl;
+        std::cout << typeid(this).name() << " : " << __func__ << " got bad length (" << r << ") "
+                  << " expected (" << sizeof(msg) << ")" << std::endl;
         r = -EINVAL;
     } else {  // valid message
         sscanf(msg, "%hx:%x:%x:%x:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn), gid);

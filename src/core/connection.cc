@@ -138,7 +138,7 @@ void Connection::process() {
 }
 
 void Connection::accept(ConnectedSocket socket, const entity_addr_t &listen_addr, const entity_addr_t &peer_addr_) {
-    std::cout << typeid(this).name() << " : " << __func__ << " sd=" << socket.fd() << " listen_addr " << listen_addr << " peer_addr " << peer_addr
+    std::cout << typeid(this).name() << " : " << __func__ << " sd=" << socket.fd() << " listen_addr " << listen_addr << " peer_addr " << peer_addr_
               << std::endl;
     kassert(socket.fd() >= 0);
 

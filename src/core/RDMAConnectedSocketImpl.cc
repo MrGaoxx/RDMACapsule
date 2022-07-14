@@ -247,7 +247,7 @@ ssize_t RDMAConnectedSocketImpl::read(char *buf, size_t len) {
     }
 
     if (!active) {
-        std::cout << typeid(this).name() << " : " << __func__ << " when ib not active. len: " << len << std::endl;
+        // std::cout << typeid(this).name() << " : " << __func__ << " when ib not active. len: " << len << std::endl;
         return -EAGAIN;
     }
 

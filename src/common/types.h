@@ -20,12 +20,12 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>
 
+#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <sstream>
 #include <vector>
-#include <cerrno>
 
 #define MAX_PORT_NUMBER 65535
 
@@ -77,7 +77,7 @@ struct entity_addr_t {
         sockaddr_in socket_addr;
         inet_pton(AF_INET, ip, &socket_addr.sin_addr);
         socket_addr.sin_family = AF_INET;
-        socket_addr.sin_port = port;
+        socket_addr.sin_port = htons(port);
         set_sockaddr(reinterpret_cast<const sockaddr*>(&socket_addr));
     }
     void set_addr(const char* ip, uint16_t port) {
