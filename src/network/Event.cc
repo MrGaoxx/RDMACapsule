@@ -203,8 +203,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt) {
     }
 
     EventCenter::FileEvent *event = _get_file_event(fd);
-    std::cout << typeid(this).name() << " : " << __func__ << " create event started fd=" << fd << " mask=" << mask << " original mask is "
-              << event->mask << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " create event started fd=" << fd << " mask=" << mask << " original mask is " <<
+    // event->mask << std::endl;
     if (event->mask == mask) return 0;
 
     r = driver->add_event(fd, event->mask, mask);
@@ -225,8 +225,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt) {
     if (mask & EVENT_WRITABLE) {
         event->write_cb = ctxt;
     }
-    std::cout << typeid(this).name() << " : " << __func__ << " create event end fd=" << fd << " mask=" << mask << " current mask is " << event->mask
-              << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " create event end fd=" << fd << " mask=" << mask << " current mask is " <<
+    // event->mask<< std::endl;
     return 0;
 }
 
@@ -238,8 +238,8 @@ void EventCenter::delete_file_event(int fd, int mask) {
         return;
     }
     EventCenter::FileEvent *event = _get_file_event(fd);
-    std::cout << typeid(this).name() << " : " << __func__ << " delete event started fd=" << fd << " mask=" << mask << " original mask is "
-              << event->mask << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " delete event started fd=" << fd << " mask=" << mask << " original mask is "
+    //<< event->mask << std::endl;
     if (!event->mask) return;
 
     int r = driver->del_event(fd, event->mask, mask);
@@ -256,8 +256,8 @@ void EventCenter::delete_file_event(int fd, int mask) {
     }
 
     event->mask = event->mask & (~mask);
-    std::cout << typeid(this).name() << " : " << __func__ << " delete event end fd=" << fd << " mask=" << mask << " current mask is " << event->mask
-              << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " delete event end fd=" << fd << " mask=" << mask << " current mask is " <<
+    // event->mask<< std::endl;
 }
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt) {
@@ -355,7 +355,7 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
     tv.tv_sec = timeout_microseconds / 1000000;
     tv.tv_usec = timeout_microseconds % 1000000;
 
-    std::cout << typeid(this).name() << " : " << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << std::endl;
     std::vector<FiredFileEvent> fired_events;
     numevents = driver->event_wait(fired_events, &tv);
     auto working_start = common::mono_clock::now();
@@ -381,8 +381,8 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
             }
         }
 
-        std::cout << typeid(this).name() << " : " << __func__ << " event_wq process is " << fired_events[event_id].fd << " mask is "
-                  << fired_events[event_id].mask << std::endl;
+        // std::cout << typeid(this).name() << " : " << __func__ << " event_wq process is " << fired_events[event_id].fd << " mask is " <<
+        // fired_events[event_id].mask << std::endl;
     }
 
     if (trigger_time) numevents += process_time_events();
@@ -396,7 +396,7 @@ int EventCenter::process_events(unsigned timeout_microseconds, common::timespan 
         numevents += cur_process.size();
         while (!cur_process.empty()) {
             EventCallbackRef e = cur_process.front();
-            std::cout << typeid(this).name() << " : " << __func__ << " do " << e << std::endl;
+            // std::cout << typeid(this).name() << " : " << __func__ << " do " << e << std::endl;
             e->do_request(0);
             cur_process.pop_front();
         }
@@ -422,5 +422,5 @@ void EventCenter::dispatch_event_external(EventCallbackRef e) {
     }
     if (num == 1 && !in_thread()) wakeup();
 
-    std::cout << typeid(this).name() << " : " << __func__ << " " << e << " pending " << num << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " " << e << " pending " << num << std::endl;
 }

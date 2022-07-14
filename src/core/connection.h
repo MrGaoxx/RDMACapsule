@@ -52,6 +52,8 @@ class Connection {
     void cleanup();
     const entity_addr_t &get_local_addr() const { return local_addr; }
 
+    void async_read() { center->dispatch_event_external(read_callback_handler); }
+
     std::mutex &get_write_lock() { return write_lock; }
 
     std::function<void(Connection *)> *read_callback;

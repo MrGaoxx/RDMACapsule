@@ -30,7 +30,7 @@ std::function<void()> NetworkStack::add_thread(Worker* w) {
         w->initialize();
         w->init_done();
         while (!w->done) {
-            std::cout << typeid(this).name() << " : " << __func__ << " calling event process" << std::endl;
+            // std::cout << typeid(this).name() << " : " << __func__ << " calling event process" << std::endl;
 
             common::timespan dur;
             int r = w->center.process_events(EventMaxWaitUs, &dur);

@@ -383,6 +383,11 @@ int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
     ssize_t r = ::read(socket_fd, &msg, sizeof(msg));
     // Drop incoming qpt
 
+    printf(msg, "%04x:%08x:%08x:%08x:%s");
+    std::cout << std::endl;
+    printf(msg, "%hx:%x:%x:%x:%s");
+    std::cout << std::endl;
+
     if (r < 0) {
         r = -errno;
         std::cout << typeid(this).name() << " : " << __func__ << " got error " << r << ": " << cpp_strerror(r) << std::endl;
@@ -397,6 +402,9 @@ int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
         wire_gid_to_gid(gid, &peer_cm_meta);
         std::cout << typeid(this).name() << " : " << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn << ", "
                   << peer_cm_meta.psn << ", " << peer_cm_meta.peer_qpn << ", " << gid << std::endl;
+
+        std::cout << typeid(this).name() << " : " << __func__ << " recevd: " << ntohs(peer_cm_meta.lid) << ", " << ntohs(peer_cm_meta.local_qpn)
+                  << ", " << ntohs(peer_cm_meta.psn) << ", " << ntohs(peer_cm_meta.peer_qpn) << ", " << gid << std::endl;
     }
     return r;
 }
