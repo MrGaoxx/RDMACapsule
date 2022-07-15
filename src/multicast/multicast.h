@@ -3,6 +3,7 @@
 #include <array>
 
 #include "common/types.h"
+#include "controller/mc_control_plane.h"
 #include "core/server.h"
 
 static const int kNumMulticasts = 2;
@@ -91,6 +92,7 @@ struct MCState {
     enum class ClientState { STATE_INIT = 0, STATE_HANDSHAKE_RECEIVED, STATE_HANDSHAKE_SENT, STATE_ACK_RECEIVED, STATE_ERROR };
     enum class ServerState {
         STATE_INIT = static_cast<int>(ClientState::STATE_ERROR) + 1,
+        STATE_CONNECTED,
         STATE_HANDSHAKE_SENT,
         STATE_HANDSHAKE_ACK_SENT,
         STATE_ERROR
@@ -132,6 +134,9 @@ inline std::ostream &operator<<(std::ostream &os, MCState::ServerState cstate) {
         case MCState::ServerState::STATE_INIT:
             os << "STATE_INIT" << std::endl;
             break;
+        case MCState::ServerState::STATE_CONNECTED:
+            os << "STATE_CONNECTED" << std::endl;
+            break;
         case MCState::ServerState::STATE_HANDSHAKE_SENT:
             os << "STATE_HANDSHAKE_SENT" << std::endl;
             break;
@@ -157,28 +162,29 @@ class MulticastDaemon : public Server {
 
     std::function<void(Connection *)> mc_client_conn_read_callback;
     std::function<void(Connection *)> mc_server_conn_read_callback;
-    std::function<void(Connection *)> mc_conn_write_callback;
+    std::function<void(Connection *)> mc_server_conn_write_callback;
 
    private:
     std::mutex data_lock;
     // std::unordered_map<entity_addr_t, mc_id_t> multicast_map;
     std::unordered_map<mc_id_t, multicast_cm_meta_t> multicast_cm_meta;
     std::unordered_map<mc_id_t, MCState> multicast_state;
-    std::unordered_map<mc_id_t, std::array<Connection *, kNumMulticasts>> multicast_connections;
+    std::unordered_map<mc_id_t, std::array<Connection *, kNumMulticasts + 1>> multicast_connections;
     std::unordered_map<mc_id_t, std::array<entity_addr_t, kNumMulticasts>> multicast_addrs;
+    SwitchTableWritter p4_writter;
 
     std::mutex io_lock;
     void process_client_read(Connection *);
     void process_server_read(Connection *);
-    void process_write(Connection *){};
+    void handle_server_established(Connection *);
 
-    void send_handshake_to_client(Connection *, char *, mc_id_t, multicast_cm_meta_t &, MCState &);
-    void send_handshake_to_server(char *, mc_id_t, multicast_cm_meta_t &, MCState &, int i);
+    void check_and_send_handshake_to_client(Connection *, mc_id_t, multicast_cm_meta_t &, MCState &);
+    void send_handshake_to_server(mc_id_t, multicast_cm_meta_t &, MCState &, int i);
     int get_mc_index(mc_id_t mc_id, Connection *conn) {
         kassert(multicast_connections.count(mc_id) == 1);
         int i = 0;
         for (; i < kNumMulticasts; i++) {
-            if (multicast_connections[mc_id][i] == conn) break;
+            if (multicast_connections[mc_id][i + 1] == conn) break;
         }
         return i;
     }

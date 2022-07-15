@@ -1,5 +1,5 @@
+#include <iostream>
 #include"mc_control_plane.h"
-#include<iostream>
 
 int main(){
     uint32_t mcg_id1 = 0;
@@ -8,7 +8,7 @@ int main(){
     std::cout<<"Test begin..."<<std::endl;
 
     SwitchTableWritter *myWritter = new SwitchTableWritter();
-    std::cout<<"Switch address is "<<myWritter->get_switch_addr()<<std::endl;
+    std::cout << "Switch address is " << myWritter->get_switch_addr() << std::endl;
 
     mcg_id1 = myWritter->multicast_group_add(0xac10000b,0x000703,0x000472,0xac10000c,0x000481,0xac10000f,0x000482,0xac100012,0x000483);
     std::cout<<"multicast group id: "<< mcg_id1 << " added successfully!"<<std::endl;
@@ -30,5 +30,5 @@ int main(){
     myWritter->multicast_group_del(mcg_id2, 0xac10000c,0x000704,0x000473,0xac10000b,0xac100012);
     std::cout<<"multicast group id: "<< mcg_id2 << " deleted successfully!"<<std::endl;
 
-    std::cout<<"Test end."<<std::endl;
+    std::cout << "Test end." << std::endl;
 }
