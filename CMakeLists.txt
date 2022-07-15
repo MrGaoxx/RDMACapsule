@@ -26,7 +26,7 @@ AUX_SOURCE_DIRECTORY(./src/network CPP_NETWORK)
 AUX_SOURCE_DIRECTORY(./src/multicast CPP_MULTICAST)
 AUX_SOURCE_DIRECTORY(./src/controller CPP_CONTROLLER)
 INCLUDE_DIRECTORIES(./src/ ./src/common ./src/core ./src/network ./src/multicast ./src/controller /usr/include/python2.7)
-ADD_LIBRARY(RDMACapsule ${CPP_COMMON} ${CPP_CORE} ${CPP_NETWORK} ${CPP_MULTICAST})
+ADD_LIBRARY(RDMACapsule ${CPP_COMMON} ${CPP_CORE} ${CPP_NETWORK} ${CPP_MULTICAST} ${CPP_CONTROLLER})
 
 #find_path(PATH_LIBVERBS libibverbs.a)
 #find_path(PATH_LIBRDMACM librdmacm.a)

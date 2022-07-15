@@ -11,7 +11,7 @@ MulticastDaemon::MulticastDaemon(Context *c) : Server(c) {
     mc_server_conn_write_callback = std::bind(&MulticastDaemon::handle_server_established, this, std::placeholders::_1);
     {
         std::cout << "Switch address is " << p4_writter.get_switch_addr() << std::endl;
-        p4_writter.init_switch_table();
+        // p4_writter.init_switch_table();
     }
 }
 MulticastDaemon::~MulticastDaemon() {}
@@ -184,9 +184,11 @@ void MulticastDaemon::check_and_send_handshake_to_client(Connection *conn, mc_id
         }
     }
 
-    p4_writter.multicast_group_add(conn->get_local_addr().in4_addr().sin_addr.s_addr, mc_id, mc_cm_meta.sender_local_qpn,
-                                   multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr, mc_cm_meta.receiver_local_qpn[0],
-                                   multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr, mc_cm_meta.receiver_local_qpn[1]);
+    // p4_writter.multicast_group_del(mc_id, conn->get_local_addr().in4_addr().sin_addr.s_addr, mc_id, htonl(mc_cm_meta.sender_local_qpn),
+    //                               multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr, multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr);
+    p4_writter.multicast_group_add(conn->get_local_addr().in4_addr().sin_addr.s_addr, mc_id, htonl(mc_cm_meta.sender_local_qpn),
+                                   multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr, htonl(mc_cm_meta.receiver_local_qpn[0]),
+                                   multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr, htonl(mc_cm_meta.receiver_local_qpn[1]));
 
     int retry = 0;
     char temp_gid[33];
