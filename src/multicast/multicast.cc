@@ -89,7 +89,7 @@ void MulticastDaemon::process_client_read(Connection *conn) {
 
         switch (mc_state.client_state) {
             case MCState::ClientState::STATE_INIT: {
-                kassert(mc_cm_meta.sender_psn == 0);
+                // kassert(mc_cm_meta.sender_psn == 1);
                 kassert(mc_cm_meta.sender_peer_qpn == 0);
                 mc_cm_meta.sender_peer_qpn = mc_id;
 
@@ -105,7 +105,7 @@ void MulticastDaemon::process_client_read(Connection *conn) {
                 break;
             }
             case MCState::ClientState::STATE_HANDSHAKE_SENT: {
-                kassert(mc_cm_meta.sender_psn == 0);
+                // kassert(mc_cm_meta.sender_psn == 1);
                 kassert(mc_cm_meta.sender_local_qpn == mc_id);
                 // send_handshake_to_client(conn, msg, mc_id, mc_cm_meta, mc_state);
                 mc_state.client_state = MCState::ClientState::STATE_ACK_RECEIVED;
@@ -186,14 +186,19 @@ void MulticastDaemon::check_and_send_handshake_to_client(Connection *conn, mc_id
 
     // p4_writter.multicast_group_del(mc_id, conn->get_local_addr().in4_addr().sin_addr.s_addr, mc_id, htonl(mc_cm_meta.sender_local_qpn),
     //                               multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr, multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr);
-    p4_writter.multicast_group_add(conn->get_local_addr().in4_addr().sin_addr.s_addr, mc_id, htonl(mc_cm_meta.sender_local_qpn),
-                                   multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr, htonl(mc_cm_meta.receiver_local_qpn[0]),
-                                   multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr, htonl(mc_cm_meta.receiver_local_qpn[1]));
+    std::cout << "Writing to table: " << std::hex << htonl(conn->get_peer_socket_addr().in4_addr().sin_addr.s_addr) << " " << mc_id << " "
+              << mc_cm_meta.sender_local_qpn << " " << htonl(multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr) << " "
+              << mc_cm_meta.receiver_local_qpn[0] << " " << htonl(multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr) << " "
+              << mc_cm_meta.receiver_local_qpn[1] << std::endl;
+
+    p4_writter.multicast_group_add(htonl(conn->get_peer_socket_addr().in4_addr().sin_addr.s_addr), mc_id, mc_cm_meta.sender_local_qpn,
+                                   htonl(multicast_addrs[mc_id][0].in4_addr().sin_addr.s_addr), mc_cm_meta.receiver_local_qpn[0],
+                                   htonl(multicast_addrs[mc_id][1].in4_addr().sin_addr.s_addr), mc_cm_meta.receiver_local_qpn[1]);
 
     int retry = 0;
     char temp_gid[33];
     char msg[TCP_MSG_LEN];
-    multicast_cm_meta_t::gid_to_wire_gid(&mc_cm_meta.sender_gid, temp_gid);
+    multicast_cm_meta_t::gid_to_wire_gid(&mc_cm_meta.receiver_gid[0], temp_gid);
     sprintf(msg, "%04x:%08x:%08x:%08x:%s", mc_cm_meta.receiver_lid[0], mc_id, mc_cm_meta.sender_psn, mc_cm_meta.sender_local_qpn, temp_gid);
 
     std::cout << "Sending handshake msgs to mc_id:" << mc_id << " client" << std::endl;
@@ -230,8 +235,8 @@ void MulticastDaemon::send_handshake_to_server(mc_id_t mc_id, multicast_cm_meta_
     kassert(mc_state.server_state[i] == MCState::ServerState::STATE_CONNECTED ||
             mc_state.server_state[i] == MCState::ServerState::STATE_HANDSHAKE_SENT);
     multicast_cm_meta_t::gid_to_wire_gid(&mc_cm_meta.sender_gid, temp_gid);
-    sprintf(msg, "%04x:%08x:%08x:%08x:%s", mc_cm_meta.sender_lid, mc_cm_meta.sender_peer_qpn, mc_cm_meta.sender_psn, mc_cm_meta.receiver_local_qpn[i],
-            temp_gid);
+    sprintf(msg, "%04x:%08x:%08x:%08x:%s", mc_cm_meta.sender_lid, mc_cm_meta.sender_local_qpn, mc_cm_meta.sender_psn,
+            mc_cm_meta.receiver_local_qpn[i], temp_gid);
 
     std::cout << "Sending handshake msgs to mc_id:" << mc_id << " No." << i << " server" << std::endl;
     std::cout << typeid(this).name() << " : " << __func__ << " sending: " << mc_cm_meta.sender_lid << ", " << mc_cm_meta.sender_peer_qpn << ", "
