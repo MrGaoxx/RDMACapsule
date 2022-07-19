@@ -166,6 +166,9 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
         assert(false);
     }
 
+    void set_txc_callback(std::function<void(Chunk *)> cb) override { txc_callback = cb; }
+    std::function<void(Chunk *)> txc_callback;
+
    protected:
     Context *context;
     Infiniband::QueuePair *qp;

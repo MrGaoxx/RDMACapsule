@@ -498,6 +498,9 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
             }
         }
 
+        RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
+        conn->txc_callback(reinterpret_cast<Chunk *>(response->wr_id));
+
         auto chunk = reinterpret_cast<Chunk *>(response->wr_id);
         // TX completion may come either from
         //  1) regular send message, WCE wr_id points to chunk
@@ -529,7 +532,7 @@ void RDMADispatcher::post_tx_buffer(std::vector<Chunk *> &chunks) {
 
     inflight -= chunks.size();
     ib->get_memory_manager()->return_tx(chunks);
-    std::cout << typeid(this).name() << " : " << __func__ << " release " << chunks.size() << " chunks, inflight " << inflight << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " release " << chunks.size() << " chunks, inflight " << inflight << std::endl;
     notify_pending_workers();
 }
 

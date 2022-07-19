@@ -19,6 +19,7 @@ class Server {
     virtual Connection *create_connect(const entity_addr_t &addr);
 
     virtual int Send(entity_addr_t dst, BufferList bl) { conns[dst]->Send(bl); }
+    void set_txc_callback(entity_addr_t dst, std::function<void(Infiniband::MemoryManager::Chunk *)> cb) { conns[dst]->set_txc_callback(cb); }
     virtual ssize_t Read(entity_addr_t addr, char *buf, size_t n) {
         // tbd
         kassert(accepting_conns.size() == 1);

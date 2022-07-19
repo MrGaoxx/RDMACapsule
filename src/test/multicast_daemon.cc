@@ -62,6 +62,7 @@ int main(int argc, char* argv[]) {
     MulticastDaemonApp server(configFileName);
     server.Init();
     int error = server.Listen();
+    srand(time(NULL));
     if (unlikely(error)) {
         std::cout << "worker cannot listen socket on addr" << cpp_strerror(error) << std::endl;
         return 1;

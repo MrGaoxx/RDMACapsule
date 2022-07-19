@@ -24,6 +24,8 @@ class Connection {
         return cs.send(bl, false);
     }
 
+    void set_txc_callback(std::function<void(Infiniband::MemoryManager::Chunk *)> cb) { cs.set_callback(cb); }
+
     ssize_t write(char *buf, size_t size) { return cs.write(buf, size); }
 
     ssize_t Read(char *buf, size_t n) { return cs.read(buf, n); }
@@ -51,7 +53,6 @@ class Connection {
     void stop(bool queue_reset);
     void cleanup();
     const entity_addr_t &get_local_addr() const { return local_addr; }
-
     void async_read() { center->dispatch_event_external(read_callback_handler); }
 
     std::mutex &get_write_lock() { return write_lock; }

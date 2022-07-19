@@ -347,7 +347,7 @@ ssize_t RDMAConnectedSocketImpl::send(BufferList &bl, bool more) {
             return bytes;
         }
     }
-    std::cout << typeid(this).name() << " : " << __func__ << " QP: " << local_qpn << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " QP: " << local_qpn << std::endl;
     ssize_t r = submit(more);
     if (r < 0 && r != -EAGAIN) return r;
     return bytes;
@@ -392,7 +392,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
     if (error) return -error;
     std::lock_guard l{lock};
     size_t bytes = pending_bl.get_len();
-    std::cout << typeid(this).name() << " : " << __func__ << " we need " << bytes << " bytes. iov size: " << pending_bl.GetSize() << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " we need " << bytes << " bytes. iov size: " << pending_bl.GetSize() << std::endl;
     if (!bytes) return 0;
 
     std::vector<Chunk *> tx_buffers;
@@ -434,18 +434,18 @@ sending:
     // kassert(total_copied == pending_bl.get_len());
     pending_bl.Clear();
 
-    std::cout << typeid(this).name() << " : " << __func__ << " left bytes: " << pending_bl.get_len() << " in buffers " << pending_bl.GetSize()
-              << " tx chunks " << tx_buffers.size() << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " left bytes: " << pending_bl.get_len() << " in buffers " << pending_bl.GetSize()
+    //<< " tx chunks " << tx_buffers.size() << std::endl;
 
     int r = post_work_request(tx_buffers);
     if (r < 0) return r;
 
-    std::cout << typeid(this).name() << " : " << __func__ << " finished sending " << total_copied << " bytes." << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " finished sending " << total_copied << " bytes." << std::endl;
     return pending_bl.get_len() ? -EAGAIN : 0;
 }
 
 int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers) {
-    std::cout << typeid(this).name() << " : " << __func__ << " QP: " << local_qpn << " numchunks: " << tx_buffers.size() << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " QP: " << local_qpn << " numchunks: " << tx_buffers.size() << std::endl;
     auto current_buffer = tx_buffers.begin();
     ibv_sge isge[tx_buffers.size()];
     uint32_t current_sge = 0;
@@ -462,8 +462,8 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
         isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
         isge[current_sge].length = (*current_buffer)->get_offset();
         isge[current_sge].lkey = (*current_buffer)->mr->lkey;
-        std::cout << typeid(this).name() << " : " << __func__ << " sending buffer: " << *current_buffer << " length: " << isge[current_sge].length
-                  << std::endl;
+        // std::cout << typeid(this).name() << " : " << __func__ << " sending buffer: " << *current_buffer << " length: " << isge[current_sge].length
+        // << std::endl;
 
         iswr[current_swr].wr_id = reinterpret_cast<uint64_t>(*current_buffer);
         iswr[current_swr].next = NULL;
@@ -489,7 +489,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
         return -errno;
     }
     worker->perf_logger->inc(l_msgr_rdma_tx_chunks, tx_buffers.size());
-    std::cout << typeid(this).name() << " : " << __func__ << " qp state is " << get_qp_state() << std::endl;
+    // std::cout << typeid(this).name() << " : " << __func__ << " qp state is " << get_qp_state() << std::endl;
     return 0;
 }
 

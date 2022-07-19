@@ -1,9 +1,8 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#include <cerrno>
-
 #include <atomic>
+#include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -18,6 +17,7 @@
         std::cout << "assert failed " << #x << std::endl; \
         abort();                                          \
     }
+
 inline std::string cpp_strerror(int err) {
     char buf[128];
 

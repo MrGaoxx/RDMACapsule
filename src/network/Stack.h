@@ -21,6 +21,7 @@
 #include "common/context.h"
 #include "common/perf_counters.h"
 #include "common/types.h"
+#include "core/Infiniband.h"
 #include "network/Event.h"
 
 class Worker;
@@ -34,6 +35,7 @@ class ConnectedSocketImpl {
     virtual void shutdown() = 0;
     virtual void close() = 0;
     virtual int fd() const = 0;
+    virtual void set_txc_callback(std::function<void(Infiniband::MemoryManager::Chunk *)> bc){};
 };
 
 class ConnectedSocket;
@@ -81,6 +83,8 @@ class ConnectedSocket {
     ConnectedSocket(ConnectedSocket &&cs) = default;
     /// Move-assigns a \c ConnectedSocket object.
     ConnectedSocket &operator=(ConnectedSocket &&cs) = default;
+
+    void set_callback(std::function<void(Infiniband::MemoryManager::Chunk *)> cb) { return _csi->set_txc_callback(cb); }
 
     int is_connected() { return _csi->is_connected(); }
     /// Read the input stream with copy.

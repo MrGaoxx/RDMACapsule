@@ -1,8 +1,8 @@
 #include "multicast/multicast.h"
 
-MulticastDaemon::MulticastDaemon(Context *c) : Server(c) {
+MulticastDaemon::MulticastDaemon(Context *c) : Server(c), mc_id(rand() % (2 << 16)) {
     // multicast_map[entity_addr_t("172.16.0.11", 30000)] = 1;
-    multicast_addrs[mc_id] = {entity_addr_t("172.16.0.12", 30000), entity_addr_t("172.16.0.15", 30000)};
+    multicast_addrs[mc_id] = {entity_addr_t("172.16.0.15", 30000), entity_addr_t("172.16.0.11", 30000)};
 
     // mc_id++;
 
@@ -198,7 +198,7 @@ void MulticastDaemon::check_and_send_handshake_to_client(Connection *conn, mc_id
     int retry = 0;
     char temp_gid[33];
     char msg[TCP_MSG_LEN];
-    multicast_cm_meta_t::gid_to_wire_gid(&mc_cm_meta.receiver_gid[0], temp_gid);
+    multicast_cm_meta_t::gid_to_wire_gid(&mc_cm_meta.receiver_gid[1], temp_gid);
     sprintf(msg, "%04x:%08x:%08x:%08x:%s", mc_cm_meta.receiver_lid[0], mc_id, mc_cm_meta.sender_psn, mc_cm_meta.sender_local_qpn, temp_gid);
 
     std::cout << "Sending handshake msgs to mc_id:" << mc_id << " client" << std::endl;
