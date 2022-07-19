@@ -158,7 +158,7 @@ Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type
       local_cm_meta{0},
       txcq(txcq),
       rxcq(rxcq),
-      initial_psn(0 & PSN_MSK),
+      initial_psn(520 & PSN_MSK),
       // One extra WR for beacon
       max_send_wr(tx_queue_len + 1),
       max_recv_wr(rx_queue_len),
@@ -402,9 +402,6 @@ int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
         wire_gid_to_gid(gid, &peer_cm_meta);
         std::cout << typeid(this).name() << " : " << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn << ", "
                   << peer_cm_meta.psn << ", " << peer_cm_meta.peer_qpn << ", " << gid << std::endl;
-
-        std::cout << typeid(this).name() << " : " << __func__ << " recevd: " << ntohs(peer_cm_meta.lid) << ", " << ntohs(peer_cm_meta.local_qpn)
-                  << ", " << ntohs(peer_cm_meta.psn) << ", " << ntohs(peer_cm_meta.peer_qpn) << ", " << gid << std::endl;
     }
     return r;
 }

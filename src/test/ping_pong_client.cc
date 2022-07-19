@@ -64,6 +64,7 @@ void RDMAPingPongClient::Send(Connection*) {
     int size_prefix = strlen(prefix);
 
     int i = 0;
+    // sleep(3600);
     while (i < send_iterations) {
         std::vector<Infiniband::MemoryManager::Chunk*> buffers;
         GetBuffers(buffers, RDMAPingPongClient::kRequestSize * RDMAPingPongClient::kNumRequest);
