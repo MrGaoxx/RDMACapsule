@@ -227,8 +227,6 @@ class Infiniband {
             void clear_qp() { set_qp(nullptr); }
             QueuePair *get_qp() { return qp; }
 
-            char *GetCurrentPointer() {}
-
            public:
             ibv_mr *mr;
             QueuePair *qp;

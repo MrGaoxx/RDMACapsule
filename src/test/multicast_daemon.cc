@@ -57,12 +57,14 @@ int MulticastDaemonApp::Listen() {
 }
 
 int main(int argc, char* argv[]) {
+    srand(time(NULL));
     std::cout << "The filename of configuration file is: " << std::string(argv[1]) << std::endl;
     std::string configFileName(argv[1]);
     MulticastDaemonApp server(configFileName);
+
     server.Init();
     int error = server.Listen();
-    srand(time(NULL));
+
     if (unlikely(error)) {
         std::cout << "worker cannot listen socket on addr" << cpp_strerror(error) << std::endl;
         return 1;

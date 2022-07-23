@@ -1,6 +1,6 @@
 #include "multicast/multicast.h"
 
-MulticastDaemon::MulticastDaemon(Context *c) : Server(c), mc_id(rand() % (2 << 16)) {
+MulticastDaemon::MulticastDaemon(Context *c) : Server(c), mc_id(rand() % 256) {
     // multicast_map[entity_addr_t("172.16.0.11", 30000)] = 1;
     multicast_addrs[mc_id] = {entity_addr_t("172.16.0.15", 30000), entity_addr_t("172.16.0.11", 30000)};
 
@@ -34,8 +34,6 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
     multicast_state[mc_id] = MCState();
     kassert(multicast_cm_meta.count(mc_id) == 0);
     multicast_cm_meta[mc_id] = multicast_cm_meta_t();
-    auto &mc_state = multicast_state[mc_id];
-    // mc_state.client_state = MCState::ClientState::STATE_INIT;
 
     std::cout << "CREATING CONNECTIONS TO OTHER SERVERS... " << std::endl;
     for (int i = 0; i < kNumMulticasts; i++) {
@@ -61,7 +59,7 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
 void MulticastDaemon::process_client_read(Connection *conn) {
     std::cout << __func__ << std::endl;
     char msg[TCP_MSG_LEN];
-    int read_size = 0;
+    uint32_t read_size = 0;
     {
         std::lock_guard iol{io_lock};
         while (read_size < TCP_MSG_LEN) {
@@ -127,7 +125,7 @@ void MulticastDaemon::process_server_read(Connection *conn) {
     {
         std::lock_guard iol{io_lock};
         while (read_size < TCP_MSG_LEN) {
-            int read_bytes = conn->Read(msg, TCP_MSG_LEN - read_size);
+            uint32_t read_bytes = conn->Read(msg, TCP_MSG_LEN - read_size);
             if (unlikely(read_bytes < 0 && read_bytes != -EAGAIN)) {
                 std::cout << typeid(this).name() << " : " << __func__ << " got error " << read_bytes << ": " << cpp_strerror(read_bytes) << std::endl;
             } else {  // tbd, disconnection message is of length 0

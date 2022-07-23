@@ -86,6 +86,7 @@ inline std::ostream &operator<<(std::ostream &os, const multicast_cm_meta_t &mc_
     }
     os << "\n";
     os << std::endl;
+    return os;
 }
 
 struct MCState {

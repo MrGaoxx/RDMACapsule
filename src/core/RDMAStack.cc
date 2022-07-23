@@ -254,13 +254,13 @@ void RDMADispatcher::polling() {
     while (true) {
         int tx_ret = tx_cq->poll_cq(MAX_COMPLETIONS, wc);
         if (tx_ret > 0) {
-            std::cout << typeid(this).name() << " : " << __func__ << " tx completion queue got " << tx_ret << " responses." << std::endl;
+            // std::cout << typeid(this).name() << " : " << __func__ << " tx completion queue got " << tx_ret << " responses." << std::endl;
             handle_tx_event(wc, tx_ret);
         }
 
         int rx_ret = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
         if (rx_ret > 0) {
-            std::cout << typeid(this).name() << " : " << __func__ << " rx completion queue got " << rx_ret << " responses." << std::endl;
+            // std::cout << typeid(this).name() << " : " << __func__ << " rx completion queue got " << rx_ret << " responses." << std::endl;
             handle_rx_event(wc, rx_ret);
         }
 
@@ -426,15 +426,15 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         ibv_wc *response = &cqe[i];
 
         // If it's beacon WR, enqueue the QP to be destroyed later
-        if (response->wr_id == BEACON_WRID) {
+        if (unlikely(response->wr_id == BEACON_WRID)) {
             enqueue_dead_qp(response->qp_num);
             continue;
         }
 
-        std::cout << typeid(this).name() << " : " << __func__ << " QP number: " << response->qp_num << " len: " << response->byte_len
-                  << " status: " << ib->wc_status_to_string(response->status) << std::endl;
+        // std::cout << typeid(this).name() << " : " << __func__ << " QP number: " << response->qp_num << " len: " << response->byte_len
+        //<< " status: " << ib->wc_status_to_string(response->status) << std::endl;
 
-        if (response->status != IBV_WC_SUCCESS) {
+        if (unlikely(response->status != IBV_WC_SUCCESS)) {
             switch (response->status) {
                 case IBV_WC_RETRY_EXC_ERR: {
                     perf_logger->inc(l_msgr_rdma_tx_wc_retry_errors);

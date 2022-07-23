@@ -54,7 +54,7 @@ class C_write_callback : public EventCallback {
 };
 
 Connection::Connection(Context *context, Server *s, Worker *w)
-    : context(context), server(s), stack(s->get_network_stack()), state(STATE_NONE), worker(w), center(&w->center) {
+    : state(STATE_NONE), stack(s->get_network_stack()), context(context), worker(w), center(&w->center), server(s) {
     read_handler = new C_handle_read(this);
     read_callback_handler = new C_read_callback(this);
     write_callback_handler = new C_write_callback(this);
@@ -95,12 +95,13 @@ void Connection::process() {
             opts.priority = context->m_rdma_config_->m_tcp_priority_;
             opts.connect_bind_addr = context->m_rdma_config_->m_addr;
             ssize_t r = worker->connect(peer_addr, opts, &cs);
-            if (r < 0) {
+            if (unlikely(r < 0)) {
                 return;
             }
 
             center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
             state = STATE_CONNECTING_RE;
+            return;
         }
         case STATE_CONNECTING_RE: {
             ssize_t r = cs.is_connected();

@@ -2,7 +2,7 @@
 
 #include "core/Infiniband.h"
 
-Server::Server(Context *c) : context(c), accepting_conns() {
+Server::Server(Context *c) : accepting_conns(), context(c) {
     if (context->m_rdma_config_->m_use_rdma_) {
         stack = NetworkStack::create(context, "rdma");
     } else {
@@ -34,7 +34,7 @@ int Server::bind(const entity_addr_t &bind_addr) {
     lock.unlock();
 
     entity_addr_t bound_addr;
-    unsigned i = 0;
+
     // choose a random prorcessor to bind
     auto &&p = processors[conn_count % processors.size()];
     if (p->is_running()) {

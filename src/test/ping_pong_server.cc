@@ -20,9 +20,9 @@ class RDMAPingPongServer {
     int Listen();
     void Poll(Connection*);
 
-    static const uint32_t kRequestSize = 32 * 1024;
-    static const uint32_t kNumRequest = 8;
-    char recv_buffer[kRequestSize][kNumRequest];
+    static const uint32_t kRequestSize = 128;
+    static const uint32_t kMaxNumRequest = 8;
+    char recv_buffer[kRequestSize][kMaxNumRequest];
     uint8_t pos;
 
    private:
@@ -79,17 +79,30 @@ void RDMAPingPongServer::Poll(Connection*) {
                 std::cout << "!!! read the recv buffer of size:[" << rs << "] expected:[" << kRequestSize << "]" << std::endl;
             }
             std::cout << "read the recv buffer \n";
-            for (auto& i : recv_buffer[pos]) {
-                std::cout << i << " ";
-            }
-            std::cout << std::endl;
-            pos = (pos + 1) % kNumRequest;
+            pos = (pos + 1) % kMaxNumRequest;
         }
     }
 }
 
+// std::ostream& operator<<(std::ostream& os, timespec& tv) { return os << "tv.tv_sec: " << tv.tv_sec << " tv.tv_nsec: " << tv.tv_nsec << std::endl; }
+
 int main(int argc, char* argv[]) {
+    Cycles::init();
+    /*
+    while (true) {
+        std::cout << "==================================" << std::endl;
+        test_rdtsc_time();
+        test_gettimeofday_time();
+        test_clocktime_time();
+        test_rdtsc_rdtsc();
+        test_gettimeofday_rdtsc();
+        std::cout << "==================================" << std::endl;
+        Cycles::sleep(1000000);
+    }
+    */
+
     std::cout << "The filename of configuration file is: " << std::string(argv[1]) << std::endl;
+
     std::string configFileName(argv[1]);
     RDMAPingPongServer server(configFileName);
     server.Init();

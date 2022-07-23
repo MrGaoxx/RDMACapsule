@@ -1,9 +1,9 @@
 #include "network/processer.h"
 
+#include <errno.h>
 #include <unistd.h>
 
 #include "core/server.h"
-#include <errno.h>
 
 class Processor::C_processor_accept : public EventCallback {
     Processor* pro;
@@ -14,7 +14,7 @@ class Processor::C_processor_accept : public EventCallback {
 };
 
 Processor::Processor(Server* s, Worker* w, Context* c, NetworkStack* ns)
-    : server(s), worker(w), context(c), stack(ns), listen_handler(new C_processor_accept(this)) {}
+    : worker(w), listen_handler(new C_processor_accept(this)), context(c), stack(ns), server(s) {}
 
 int Processor::bind(const entity_addr_t& bind_addr, entity_addr_t* bound_addr) {
     // bind to socket(s)

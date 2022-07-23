@@ -154,8 +154,8 @@ Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type
       srq(srq),
       qp(NULL),
       cm_id(cid),
-      peer_cm_meta{0},
-      local_cm_meta{0},
+      peer_cm_meta{0,0,0,0,0},
+      local_cm_meta{0,0,0,0,0},
       txcq(txcq),
       rxcq(rxcq),
       initial_psn(520 & PSN_MSK),
@@ -605,7 +605,7 @@ int Infiniband::CompletionQueue::rearm_notify(bool solicite_only) {
 
 int Infiniband::CompletionQueue::poll_cq(int num_entries, ibv_wc *ret_wc_array) {
     int r = ibv_poll_cq(cq, num_entries, ret_wc_array);
-    if (r < 0) {
+    if (unlikely(r < 0)) {
         std::cout << typeid(this).name() << " : " << __func__ << " poll_completion_queue occur met error: " << cpp_strerror(errno) << std::endl;
         return -1;
     }

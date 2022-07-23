@@ -25,6 +25,7 @@ class Buffer {
         start = buffer.start;
         cur = buffer.cur;
         len = buffer.len;
+        return *this;
     }
     uint32_t get_len() { return len; }
     uint32_t GetRemainingLen() const { return static_cast<uint32_t>(len - (cur - start)); }
@@ -81,12 +82,12 @@ class BufferList {
     uint32_t get_len() { return len; }
     Buffer& GetNBuffer(uint8_t n) {
         auto iter = buffer_list.begin();
-        for (int i = 0; i < n % buffer_list.size(); i++) iter++;
+        for (std::size_t i = 0; i < n % buffer_list.size(); i++) iter++;
         return *iter;
     }
     BufferList& DeleteNBuffer(uint8_t n) {
         auto iter = buffer_list.begin();
-        for (int i = 0; i < n % buffer_list.size(); i++) iter++;
+        for (uint8_t i = 0; i < n % buffer_list.size(); i++) iter++;
         buffer_list.erase(iter);
         return *this;
     }

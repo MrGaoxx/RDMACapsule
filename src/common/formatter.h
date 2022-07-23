@@ -92,7 +92,7 @@ class Formatter {
 class copyable_sstream : public std::stringstream {
    public:
     copyable_sstream() {}
-    copyable_sstream(const copyable_sstream &rhs) { str(rhs.str()); }
+    copyable_sstream(const copyable_sstream &rhs) : std::basic_ios<char>(), basic_stringstream<char>() { str(rhs.str()); }
     copyable_sstream &operator=(const copyable_sstream &rhs) {
         str(rhs.str());
         return *this;

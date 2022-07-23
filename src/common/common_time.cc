@@ -19,6 +19,9 @@
 #include <map>
 
 double Cycles::cycles_per_sec = 0.0;
+timeval Cycles::now_tv;
+timespec Cycles::now_ts;
+
 namespace common {
 using std::chrono::nanoseconds;
 using std::chrono::seconds;
@@ -53,10 +56,10 @@ std::ostream& operator<<(std::ostream& m, const std::chrono::time_point<Clock>& 
     return m;
 }
 
-template std::ostream& operator<<<mono_clock>(std::ostream& m, const mono_time& t);
-template std::ostream& operator<<<real_clock>(std::ostream& m, const real_time& t);
-template std::ostream& operator<<<coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
-template std::ostream& operator<<<coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
+template std::ostream& operator<< <mono_clock>(std::ostream& m, const mono_time& t);
+template std::ostream& operator<< <real_clock>(std::ostream& m, const real_time& t);
+template std::ostream& operator<< <coarse_mono_clock>(std::ostream& m, const coarse_mono_time& t);
+template std::ostream& operator<< <coarse_real_clock>(std::ostream& m, const coarse_real_time& t);
 
 std::string timespan_str(timespan t) {
     // FIXME: somebody pretty please make a version of this function
@@ -161,12 +164,12 @@ ostream& operator<<(ostream& m, const chrono::duration<Rep, Period>& t) {
     return m;
 }
 
-template ostream& operator<<<common::timespan::rep, common::timespan::period>(ostream&, const ::common::timespan&);
+template ostream& operator<< <common::timespan::rep, common::timespan::period>(ostream&, const ::common::timespan&);
 
-template ostream& operator<<<common::signedspan::rep, common::signedspan::period>(ostream&, const ::common::signedspan&);
+template ostream& operator<< <common::signedspan::rep, common::signedspan::period>(ostream&, const ::common::signedspan&);
 
-template ostream& operator<<<chrono::seconds::rep, chrono::seconds::period>(ostream&, const chrono::seconds&);
+template ostream& operator<< <chrono::seconds::rep, chrono::seconds::period>(ostream&, const chrono::seconds&);
 
-template ostream& operator<<<chrono::milliseconds::rep, chrono::milliseconds::period>(ostream&, const chrono::milliseconds&);
+template ostream& operator<< <chrono::milliseconds::rep, chrono::milliseconds::period>(ostream&, const chrono::milliseconds&);
 
 }  // namespace std

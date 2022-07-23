@@ -21,7 +21,7 @@
 inline std::string cpp_strerror(int err) {
     char buf[128];
 
-    char* errmsg = "Unknown error %d";
+    char* errmsg = const_cast<char*>("Unknown error %d");
 
     if (err < 0) err = -err;
     std::ostringstream oss;
@@ -32,8 +32,8 @@ inline std::string cpp_strerror(int err) {
     return oss.str();
 }
 
-#define likely(x) __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
+#define likely(x) __builtin_expect((x), 1)
+#define unlikely(x) __builtin_expect((x), 0)
 
 namespace common {
 

@@ -20,15 +20,15 @@
 
 #include <chrono>
 #include <cstring>
+#include <ctime>
 #include <iomanip>
 #include <iostream>
 #include <optional>
 #include <string>
 
-#include "common/buffer.h"
+//#include "common/buffer.h"
+#include "common/common.h"
 #include "common/formatter.h"
-struct timespec;
-
 namespace common {
 // Currently we use a 64-bit count of nanoseconds.
 
@@ -738,18 +738,30 @@ class Cycles {
     static uint64_t from_nanoseconds(uint64_t ns, double cycles_per_sec = 0);
     static void sleep(uint64_t us);
 
+    static __inline __attribute__((always_inline)) double get_cycles_per_sec() { return cycles_per_sec; }
+
+    static uint64_t get_soft_timestamp_us() {
+        gettimeofday(&now_tv, NULL);
+        return now_tv.tv_sec * 1e6 + now_tv.tv_usec;
+    }
+
+    static uint64_t get_soft_timestamp_ns() {
+        clock_gettime(CLOCK_REALTIME, &now_ts);
+        return now_ts.tv_sec * 1e6 + (now_ts.tv_nsec / 1e3);
+    }
+
    private:
     Cycles();
 
     /// Conversion factor between cycles and the seconds; computed by
     /// Cycles::init.
     static double cycles_per_sec;
-
+    static timeval now_tv;
+    static timespec now_ts;
     /**
      * Returns the conversion factor between cycles in seconds, using
      * a mock value for testing when appropriate.
      */
-    static __inline __attribute__((always_inline)) double get_cycles_per_sec() { return cycles_per_sec; }
 };
 
 /**
@@ -787,7 +799,7 @@ inline void Cycles::init() {
         }
         uint64_t start_cycles = rdtsc();
         while (1) {
-            if (gettimeofday(&stop_time, NULL) != 0) {
+            if (unlikely(gettimeofday(&stop_time, NULL) != 0)) {
                 abort();
             }
             uint64_t stop_cycles = rdtsc();
@@ -916,4 +928,58 @@ inline void Cycles::sleep(uint64_t us) {
     while (Cycles::rdtsc() < stop)
         ;
 }
+
+inline std::ostream& operator<<(std::ostream& os, timespec& tv) { return os << (tv.tv_sec * 1e9 + tv.tv_nsec) << " ns" << std::endl; }
+
+inline void test_gettimeofday_rdtsc() {
+    struct timeval start_time;
+    auto start = Cycles::rdtsc();
+    for (int i = 0; i < 1000; i++) {
+        gettimeofday(&start_time, NULL);
+    }
+    auto end = Cycles::rdtsc();
+
+    std::cout << "1000 get time of day need rdtsc: " << end - start << std::endl;
+}
+
+inline void test_rdtsc_rdtsc() {
+    auto start = Cycles::rdtsc();
+    for (int i = 0; i < 1000; i++) {
+        Cycles::rdtsc();
+    }
+    auto end = Cycles::rdtsc();
+    std::cout << "1000 rdtsc need rdtsc: " << end - start << std::endl;
+}
+
+inline void test_gettimeofday_time() {
+    struct timeval start_time, end_time;
+    gettimeofday(&start_time, NULL);
+    for (int i = 0; i < 1000; i++) {
+        gettimeofday(&end_time, NULL);
+    }
+
+    std::cout << "1000 get time of day need us: " << (end_time.tv_sec - start_time.tv_sec) * 1e6 + end_time.tv_usec - start_time.tv_usec << std::endl;
+}
+
+inline void test_rdtsc_time() {
+    struct timeval start_time, end_time;
+    gettimeofday(&start_time, NULL);
+    for (int i = 0; i < 1000; i++) {
+        Cycles::rdtsc();
+    }
+    gettimeofday(&end_time, NULL);
+    std::cout << "1000 rdtsc need us: " << (end_time.tv_sec - start_time.tv_sec) * 1e6 + end_time.tv_usec - start_time.tv_usec << std::endl;
+}
+
+inline void test_clocktime_time() {
+    struct timeval start_time, end_time;
+    timespec ts;
+    gettimeofday(&start_time, NULL);
+    for (int i = 0; i < 1000; i++) {
+        clock_gettime(CLOCK_REALTIME, &ts);
+    }
+    gettimeofday(&end_time, NULL);
+    std::cout << "1000 clock_reak_time need us: " << (end_time.tv_sec - start_time.tv_sec) * 1e6 + end_time.tv_usec - start_time.tv_usec << std::endl;
+}
+
 #endif  // COMMON_TIME_H

@@ -1,10 +1,15 @@
 cmake_minimum_required(VERSION 3.5)
 project(RDMACapsule VERSION "0.0")
 
-SET(CMAKE_BUILD_TYPE Debug)
+#SET(CMAKE_BUILD_TYPE Debug)
 IF(NOT CMAKE_BUILD_TYPE)
  SET(CMAKE_BUILD_TYPE Release)
 ENDIF()
+
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -Wno-unused-parameter")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+
 
 MESSAGE("***Build type:" ${CMAKE_BUILD_TYPE})
 INCLUDE(CheckCXXCompilerFlag)

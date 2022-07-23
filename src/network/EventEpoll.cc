@@ -71,7 +71,7 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask) {
 int EpollDriver::del_event(int fd, int cur_mask, int delmask) {
     // std::cout << typeid(this).name() << " : " << __func__ << " del event fd=" << fd << " cur_mask=" << cur_mask << " delmask=" << delmask << " to "
     // << epfd << std::endl;
-    struct epoll_event ee = {0};
+    struct epoll_event ee = {0, 0};
     int mask = cur_mask & (~delmask);
     int r = 0;
 

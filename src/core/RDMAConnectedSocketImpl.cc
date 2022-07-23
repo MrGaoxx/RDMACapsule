@@ -310,14 +310,14 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
     while (pchunk != buffers.end()) {
         tmp = (*pchunk)->read(buf + read_size, len - read_size);
         read_size += tmp;
-        std::cout << typeid(this).name() << " : " << __func__ << " read chunk " << *pchunk << " bytes length" << tmp
-                  << " offset: " << (*pchunk)->get_offset() << " ,bound: " << (*pchunk)->get_bound() << std::endl;
+        // std::cout << typeid(this).name() << " : " << __func__ << " read chunk " << *pchunk << " bytes length" << tmp
+        // << " offset: " << (*pchunk)->get_offset() << " ,bound: " << (*pchunk)->get_bound() << std::endl;
 
         if ((*pchunk)->get_size() == 0) {
             (*pchunk)->reset_read_chunk();
             dispatcher->recall_chunk_to_pool(*pchunk);
             update_post_backlog();
-            std::cout << typeid(this).name() << " : " << __func__ << " read over one chunk " << std::endl;
+            // std::cout << typeid(this).name() << " : " << __func__ << " read over one chunk " << std::endl;
             pchunk++;
         }
 
@@ -428,7 +428,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
         total_copied += tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
     }
     */
-sending:
+    // sending:
 
     if (total_copied == 0) return -EAGAIN;
     // kassert(total_copied == pending_bl.get_len());
@@ -462,8 +462,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
         isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
         isge[current_sge].length = (*current_buffer)->get_offset();
         isge[current_sge].lkey = (*current_buffer)->mr->lkey;
-        // std::cout << typeid(this).name() << " : " << __func__ << " sending buffer: " << *current_buffer << " length: " << isge[current_sge].length
-        // << std::endl;
+        // std::cout << " sending buffer: " << *current_buffer << " length: " << isge[current_sge].length << std::endl;
 
         iswr[current_swr].wr_id = reinterpret_cast<uint64_t>(*current_buffer);
         iswr[current_swr].next = NULL;
@@ -482,7 +481,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
     }
 
     ibv_send_wr *bad_tx_work_request = nullptr;
-    if (ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request)) {
+    if (unlikely(ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request))) {
         std::cout << typeid(this).name() << " : " << __func__ << " failed to send data"
                   << " (most probably should be peer not ready): " << cpp_strerror(errno) << std::endl;
         worker->perf_logger->inc(l_msgr_rdma_tx_failed);
