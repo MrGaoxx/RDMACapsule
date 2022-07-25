@@ -11,11 +11,9 @@
 #include "common/statistic.h"
 #include "core/Infiniband.h"
 #include "core/server.h"
-struct timeinfo {
-    uint64_t app_send_time;
-    uint64_t post_send_time;
-    uint64_t send_completion_time;
-};
+
+extern Logger clientLogger;
+extern OriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords;
 
 class RDMAPingPongClient {
    public:
@@ -39,10 +37,9 @@ class RDMAPingPongClient {
     Connection* conn;
     entity_addr_t server_addr;
     entity_addr_t client_addr;
-    std::unordered_map<Infiniband::MemoryManager::Chunk*, timeinfo> chunk_timeinfos;
     std::mutex data_lock;
-    Logger logger;
-    AverageLoggerTerm<double> average_latency;
+    // Logger logger;
+    //  AverageLoggerTerm<double> average_latency;
 };
 
 RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
@@ -50,15 +47,16 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
       context(new Context(rdma_config)),
       server(context),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
-      client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0),
-      average_latency("average_latency", 10, &logger) {
+      client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0)
+// ,average_latency("average_latency", 10, &logger)
+{
     send_call = std::bind(&RDMAPingPongClient::Send, this, std::placeholders::_1);
     server.conn_write_callback_p = &send_call;
-    logger.SetLoggerName(std::to_string(Cycles::rdtsc()) + "client.log");
+    clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "client.log");
+    // logger.SetLoggerName(std::to_string(Cycles::rdtsc()) + "client.log");
 }
 
 void RDMAPingPongClient::Init() { server.start(); }
-
 Connection* RDMAPingPongClient::Connect(const char* serverAddr) {
     client_addr.set_addr(rdma_config->m_ip_addr.c_str(), rdma_config->m_listen_port);
     server_addr.set_addr(serverAddr, rdma_config->m_listen_port);
@@ -102,16 +100,14 @@ void RDMAPingPongClient::Send(Connection*) {
         uint64_t now = Cycles::get_soft_timestamp_us();
         for (auto& chunk : buffers) {
             std::lock_guard<std::mutex>{data_lock};
-            chunk_timeinfos.insert(std::make_pair(chunk, timeinfo()));
-            chunk_timeinfos[chunk].app_send_time = now;
+            clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<uint64_t>(chunk), TimeRecordType::APP_SEND_BEFORE, now});
         }
         server.Send(server_addr, bl);
 
         now = Cycles::get_soft_timestamp_us();
         for (auto& chunk : buffers) {
             std::lock_guard<std::mutex>{data_lock};
-            chunk_timeinfos.insert(std::make_pair(chunk, timeinfo()));
-            chunk_timeinfos[chunk].post_send_time = now;
+            clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<uint64_t>(chunk), TimeRecordType::APP_SEND_AFTER, now});
         }
         iters++;
         std::cout << "finished send iteration: " << iters << std::endl;
@@ -121,10 +117,10 @@ void RDMAPingPongClient::Send(Connection*) {
 
 void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex>{data_lock};
-    // chunk_timeinfos[chunk].send_completion_time = Cycles::rdtsc();
-    chunk_timeinfos[chunk].send_completion_time = Cycles::get_soft_timestamp_us();
-    uint64_t lat = chunk_timeinfos[chunk].send_completion_time - chunk_timeinfos[chunk].post_send_time;
-    average_latency.Add(lat);
+    clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<uint64_t>(chunk), TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
+    clientTimeRecords.Flush();
+    // uint64_t lat = chunk_timeinfos[chunk].send_completion_time - chunk_timeinfos[chunk].post_send_time;
+    //  average_latency.Add(lat);
 }
 
 int main(int argc, char* argv[]) {

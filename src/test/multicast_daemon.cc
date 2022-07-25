@@ -9,6 +9,7 @@
 #include "RDMAStack.h"
 #include "common.h"
 #include "common/context.h"
+#include "common/statistic.h"
 #include "core/Infiniband.h"
 #include "multicast/multicast.h"
 

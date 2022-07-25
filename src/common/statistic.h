@@ -45,14 +45,9 @@ inline void Logger::AssureOpen() {
 template <class T_SUM, class T>
 class LoggerTerm {
    public:
-    LoggerTerm(const std::string& name, Logger* logger) : m_sum(0), m_name(name), m_logger(logger) {}
-    virtual void Add(T value) {
-        m_sum += value;
-        if (unlikely(should_flush())) {
-            flush();
-        }
-        m_sum = 0;
-    };
+    LoggerTerm(const std::string& name, Logger* logger) : m_sum(), m_name(name), m_logger(logger) {}
+    virtual void Add(T& value) = 0;
+    virtual void Add(T&& value) = 0;
 
    protected:
     virtual bool should_flush() = 0;
@@ -66,6 +61,14 @@ template <class T_SUM, class T>
 class NumericLoggerTerm : public LoggerTerm<T_SUM, T> {
    public:
     using LoggerTerm<T_SUM, T>::LoggerTerm;
+    virtual void Add(T&& value) override {
+        LoggerTerm<T_SUM, T>::m_sum += value;
+        if (unlikely(should_flush())) {
+            flush();
+        }
+        LoggerTerm<T_SUM, T>::m_sum = 0;
+    };
+    virtual void Add(T& value) override { Add(static_cast<T&&>(value)); };
 
    protected:
     virtual bool should_flush() override { return false; }
@@ -81,42 +84,33 @@ class ContainerLoggerTerm : public LoggerTerm<T_SUM, T> {
     using LoggerTerm<T_SUM, T>::LoggerTerm;
 
    protected:
+    virtual void Add(T&& value) {
+        LoggerTerm<T_SUM, T>::m_sum.emplace_back(value);
+        if (unlikely(should_flush())) {
+            flush();
+        }
+    }
+    virtual void Add(T& value) {
+        LoggerTerm<T_SUM, T>::m_sum.push_back(value);
+        if (unlikely(should_flush())) {
+            flush();
+        }
+    }
     virtual bool should_flush() { return false; }
     virtual void flush() {
-        for (auto& i = LoggerTerm<T_SUM, T>::m_sum.begin(); i != LoggerTerm<T_SUM, T>::m_sum.end(); i++) {
+        for (auto i = LoggerTerm<T_SUM, T>::m_sum.begin(); i != LoggerTerm<T_SUM, T>::m_sum.end(); i++) {
             LoggerTerm<T_SUM, T>::m_logger->m_output << LoggerTerm<T_SUM, T>::m_name << "\t" << *i << "\n";
         }
         LoggerTerm<T_SUM, T>::m_logger->m_output << std::endl;
     };
 };
 
-/*
-template <class T>
-class StructedLoggerTermElement {
-   public:
-    StructedLoggerTermElement& operator+=(StructedLoggerTermElement& rhs) {}
-
-   private:
-    uint8_t max_struct_elements;
-    std::vector<T> struct_elements;
-};
-
-template <class T>
-class StructedLoggerTerm {
-   public:
-    LoggerTerm(const std::string& name, Logger* logger) : m_name(name), m_logger(logger){};
-    virtual void Add(T value) = 0;
-
-   public:
-    std::v
-};
-*/
-
 template <class T>
 class AverageLoggerTerm : public NumericLoggerTerm<T, T> {
    public:
     AverageLoggerTerm(const std::string& name, uint32_t max_record, Logger* logger);
-    void Add(T value) override;
+    void Add(T&& value) override;
+    void Add(T& value) override { Add(static_cast<T&&>(value)); }
 
    protected:
     uint32_t m_record_frequency;
@@ -133,7 +127,7 @@ AverageLoggerTerm<T>::AverageLoggerTerm(const std::string& name, uint32_t max_re
     : NumericLoggerTerm<T, T>(name, logger), m_record_frequency(max_record), m_index(0), m_sum(0) {}
 
 template <class T>
-void AverageLoggerTerm<T>::Add(T value) {
+void AverageLoggerTerm<T>::Add(T&& value) {
     m_sum += value;
     ++m_index;
     if (unlikely(m_index == m_record_frequency)) {
@@ -148,7 +142,8 @@ class TimeAverageLoggerTerm : public NumericLoggerTerm<T, T> {
    public:
     TimeAverageLoggerTerm(const std::string& name, uint64_t record_duration, Logger* logger);
     void Start();
-    void Add(T value) override;
+    void Add(T&& value) override;
+    void Add(T& value) override { Add(static_cast<T&&>(value)); }
     void SetLoggerInterval(uint64_t m_record_duration);
 
    private:
@@ -175,7 +170,7 @@ void TimeAverageLoggerTerm<T>::Start() {
 };
 
 template <class T>
-void TimeAverageLoggerTerm<T>::Add(T value) {
+void TimeAverageLoggerTerm<T>::Add(T&& value) {
     m_sum += value;
 };
 
@@ -201,43 +196,77 @@ template <class T_SUM, class T>
 class OriginalLoggerTerm : public ContainerLoggerTerm<T_SUM, T> {
    public:
     OriginalLoggerTerm(const std::string& name, uint64_t max_size, Logger* logger);
-    void Add(T value) override;
-
     void Flush() { flush(); };
     void SetFlushTime(uint32_t);
+    using ContainerLoggerTerm<T_SUM, T>::Add;
 
    protected:
-    virtual bool should_flush() override { return ContainerLoggerTerm<T_SUM, T>::m_sum.size() == max_flushtime; }
+    virtual bool should_flush() override { return false; }
     virtual void flush() override {
-        for (auto& i : ContainerLoggerTerm<T_SUM, T>::m_sum) {
-            ContainerLoggerTerm<T_SUM, T>::m_logger->m_output << ContainerLoggerTerm<T_SUM, T>::m_name << "\t" << *i << "\n";
-        }
-        ContainerLoggerTerm<T_SUM, T>::m_logger->m_output << std::endl;
-        m_records.clear();
+        ContainerLoggerTerm<T_SUM, T>::m_logger->m_output << ContainerLoggerTerm<T_SUM, T>::m_sum << std::endl;
+        ContainerLoggerTerm<T_SUM, T>::m_sum.clear();
     };
 
    private:
-    std::vector<T_SUM> m_records;
     uint32_t max_flushtime;
 };
 
 template <class T_SUM, class T>
 OriginalLoggerTerm<T_SUM, T>::OriginalLoggerTerm(const std::string& name, uint64_t max_size, Logger* logger)
-    : LoggerTerm<T_SUM, T>(name, logger), max_flushtime(UINT32_MAX) {
-    m_records.resize(max_size);
+    : ContainerLoggerTerm<T_SUM, T>(name, logger), max_flushtime(UINT32_MAX) {
+    ContainerLoggerTerm<T_SUM, T>::m_sum.resize(max_size);
 };
-
-template <class T_SUM, class T>
-void OriginalLoggerTerm<T_SUM, T>::Add(T value) {
-    m_records.push_back(value);
-    if (unlikely(m_records.size() == max_flushtime)) {
-        flush();
-    }
-}
 
 template <class T_SUM, class T>
 void OriginalLoggerTerm<T_SUM, T>::SetFlushTime(uint32_t flush_time) {
     max_flushtime = flush_time;
 }
+
+struct TimeRecordTerm {
+    uint64_t id_;
+    uint8_t index_;
+    uint64_t timestamp_;
+};
+
+struct TimeRecords {
+    std::unordered_map<uint64_t, std::vector<uint64_t>> records;
+    void push_back(TimeRecordTerm& term) {
+        if (unlikely(records.count(term.id_) == 0)) {
+            records.insert(std::pair(term.id_, std::vector<uint64_t>(64, 0)));
+        }
+        records[term.id_][term.index_] = term.timestamp_;
+    };
+    void emplace_back(TimeRecordTerm& term) { push_back(term); }
+    void resize(std::size_t size) {}
+    std::size_t size() { return records.size(); }
+    void clear() { records.clear(); }
+    decltype(records.begin()) begin() { return records.begin(); }
+    decltype(records.end()) end() { return records.end(); }
+};
+
+inline std::ostream& operator<<(std::ostream& os, std::pair<uint64_t, std::vector<uint64_t>> record) {
+    os << "id: " << record.first << " timestamps:";
+    for (std::size_t i = 0; i < record.second.size(); i++) {
+        os << " " << record.second[i];
+    }
+    os << std::endl;
+    return os;
+};
+
+inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
+    for (auto& record : trs.records) {
+        os << "id: " << record.first << " timestamps:";
+        for (std::size_t i = 0; i < record.second.size(); i++) {
+            os << " " << record.second[i];
+        }
+        os << "\n";
+    }
+    os << std::endl;
+    return os;
+};
+enum TimeRecordType { APP_SEND_BEFORE = 0, POST_SEND, APP_SEND_AFTER, POLLED_CQE, SEND_CB };
+
+// Logger clientLogger;
+// OriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords;
 
 #endif /* COMMON_UTIL_H */

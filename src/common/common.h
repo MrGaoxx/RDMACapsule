@@ -18,6 +18,8 @@
         abort();                                          \
     }
 
+//#define kassert(x)
+
 inline std::string cpp_strerror(int err) {
     char buf[128];
 

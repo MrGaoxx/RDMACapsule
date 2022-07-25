@@ -180,8 +180,8 @@ void EventCenter::set_owner() {
         global_centers->centers[center_id] = this;
         if (driver->need_wakeup()) {
             notify_handler = new C_handle_notify(this, context);
-            int r = create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
-            kassert(r == 0);
+            create_file_event(notify_receive_fd, EVENT_READABLE, notify_handler);
+            // kassert(r == 0);
         }
     }
 }

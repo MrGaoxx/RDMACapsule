@@ -27,7 +27,6 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
     // accepting_conn->write_callback = &mc_conn_write_callback;
 
     std::lock_guard data{data_lock};
-    // kassert(multicast_connections.count(mc_id) == 0);
     accepting_conn->set_mc_id(mc_id);
     multicast_connections[mc_id] = std::array<Connection *, kNumMulticasts + 1>();
     multicast_connections[mc_id][0] = accepting_conn;
@@ -50,7 +49,7 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
         conns[target] = new_conn;
         new_conn->set_mc_id(mc_id);
         multicast_connections[mc_id][i + 1] = new_conn;
-        // mc_state.server_state[i] = MCState::ServerState::STATE_INIT;
+        // multicast_state[mc_id].server_state[i] = MCState::ServerState::STATE_INIT;
     }
     // mc_state.client_state = MCState::ClientState::STATE_;
     mc_id++;
@@ -87,7 +86,6 @@ void MulticastDaemon::process_client_read(Connection *conn) {
 
         switch (mc_state.client_state) {
             case MCState::ClientState::STATE_INIT: {
-                // kassert(mc_cm_meta.sender_psn == 1);
                 kassert(mc_cm_meta.sender_peer_qpn == 0);
                 mc_cm_meta.sender_peer_qpn = mc_id;
 
@@ -103,7 +101,6 @@ void MulticastDaemon::process_client_read(Connection *conn) {
                 break;
             }
             case MCState::ClientState::STATE_HANDSHAKE_SENT: {
-                // kassert(mc_cm_meta.sender_psn == 1);
                 kassert(mc_cm_meta.sender_local_qpn == mc_id);
                 // send_handshake_to_client(conn, msg, mc_id, mc_cm_meta, mc_state);
                 mc_state.client_state = MCState::ClientState::STATE_ACK_RECEIVED;
@@ -121,11 +118,11 @@ void MulticastDaemon::process_client_read(Connection *conn) {
 void MulticastDaemon::process_server_read(Connection *conn) {
     std::cout << __func__ << std::endl;
     char msg[TCP_MSG_LEN];
-    int read_size = 0;
+    uint32_t read_size = 0;
     {
         std::lock_guard iol{io_lock};
         while (read_size < TCP_MSG_LEN) {
-            uint32_t read_bytes = conn->Read(msg, TCP_MSG_LEN - read_size);
+            ssize_t read_bytes = conn->Read(msg, TCP_MSG_LEN - read_size);
             if (unlikely(read_bytes < 0 && read_bytes != -EAGAIN)) {
                 std::cout << typeid(this).name() << " : " << __func__ << " got error " << read_bytes << ": " << cpp_strerror(read_bytes) << std::endl;
             } else {  // tbd, disconnection message is of length 0

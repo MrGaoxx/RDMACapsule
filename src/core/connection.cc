@@ -76,11 +76,9 @@ void Connection::process() {
 
     switch (state) {
         case STATE_NONE: {
-            std::cout << typeid(this).name() << " : " << __func__ << " enter none state" << std::endl;
             return;
         }
         case STATE_CLOSED: {
-            std::cout << typeid(this).name() << " : " << __func__ << " socket closed" << std::endl;
             return;
         }
         case STATE_CONNECTING: {
@@ -94,12 +92,13 @@ void Connection::process() {
             opts.nonblock = false;
             opts.priority = context->m_rdma_config_->m_tcp_priority_;
             opts.connect_bind_addr = context->m_rdma_config_->m_addr;
+
             ssize_t r = worker->connect(peer_addr, opts, &cs);
+            center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
             if (unlikely(r < 0)) {
+                std::cout << __func__ << ": worker connect failed" << std::endl;
                 return;
             }
-
-            center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
             state = STATE_CONNECTING_RE;
             return;
         }

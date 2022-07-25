@@ -11,6 +11,7 @@
 #include "common/context.h"
 #include "core/Infiniband.h"
 #include "core/server.h"
+
 class RDMAPingPongServer {
    public:
     RDMAPingPongServer(std::string& configFileName);

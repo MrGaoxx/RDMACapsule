@@ -154,8 +154,8 @@ Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type
       srq(srq),
       qp(NULL),
       cm_id(cid),
-      peer_cm_meta{0,0,0,0,0},
-      local_cm_meta{0,0,0,0,0},
+      peer_cm_meta{0, 0, 0, 0, 0},
+      local_cm_meta{0, 0, 0, 0, 0},
       txcq(txcq),
       rxcq(rxcq),
       initial_psn(520 & PSN_MSK),
@@ -951,7 +951,8 @@ void Infiniband::init() {
     device->binding_port(context, port_num);
     ib_physical_port = device->get_port()->get_port_num();
     pd = new ProtectionDomain(context, device);
-    kassert(Network::NetHandler::set_nonblock(device->get_context()->async_fd) == 0);
+    int rs = Network::NetHandler::set_nonblock(device->get_context()->async_fd);
+    kassert(rs == 0);
 
     support_srq = context->m_rdma_config_->m_rdma_support_srq_;
     if (support_srq) {

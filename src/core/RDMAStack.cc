@@ -23,6 +23,11 @@
 
 #include "common/common_time.h"
 #include "common/perf_counters.h"
+#include "common/statistic.h"
+
+Logger clientLogger;
+static const uint32_t MAX_RECORD_TIME = 1e4;
+OriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords("RequestTimeRecord", MAX_RECORD_TIME, &clientLogger);
 
 RDMADispatcher::~RDMADispatcher() {
     std::cout << typeid(this).name() << " : " << __func__ << " destructing rdma dispatcher" << std::endl;
@@ -247,7 +252,7 @@ void RDMADispatcher::polling() {
     std::map<RDMAConnectedSocketImpl *, std::vector<ibv_wc> > polled;
     std::vector<ibv_wc> tx_cqe;
     std::cout << typeid(this).name() << " : " << __func__ << " going to poll tx cq: " << tx_cq << " rx cq: " << rx_cq << std::endl;
-    uint64_t last_inactive = Cycles::rdtsc();
+    uint64_t last_inactive = Cycles::get_soft_timestamp_us();
     bool rearmed = false;
     int r = 0;
 
@@ -264,7 +269,7 @@ void RDMADispatcher::polling() {
             handle_rx_event(wc, rx_ret);
         }
 
-        if (!tx_ret && !rx_ret) {
+        if (unlikely(!tx_ret && !rx_ret)) {
             perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
             //
             // Clean up dead QPs when rx/tx CQs are in idle. The thing is that
@@ -292,8 +297,7 @@ void RDMADispatcher::polling() {
 
             if (!num_qp_conn && done && dead_queue_pairs.empty()) break;
 
-            uint64_t now = Cycles::rdtsc();
-            if (Cycles::to_microseconds(now - last_inactive) > context->m_rdma_config_->m_rdma_polling_us_) {
+            if (Cycles::get_soft_timestamp_us() - last_inactive > context->m_rdma_config_->m_rdma_polling_us_) {
                 handle_async_event();
                 if (!rearmed) {
                     // Clean up cq events after rearm notify ensure no new incoming event
@@ -323,7 +327,7 @@ void RDMADispatcher::polling() {
                 }
                 if (r > 0 && tx_cc->get_cq_event()) std::cout << typeid(this).name() << " : " << __func__ << " got tx cq event." << std::endl;
                 if (r > 0 && rx_cc->get_cq_event()) std::cout << typeid(this).name() << " : " << __func__ << " got rx cq event." << std::endl;
-                last_inactive = Cycles::rdtsc();
+                last_inactive = Cycles::get_soft_timestamp_us();
                 perf_logger->set(l_msgr_rdma_polling, 1);
                 rearmed = false;
             }
@@ -499,8 +503,8 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         }
 
         RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
+        clientTimeRecords.Add(TimeRecordTerm{response->wr_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
         conn->txc_callback(reinterpret_cast<Chunk *>(response->wr_id));
-
         auto chunk = reinterpret_cast<Chunk *>(response->wr_id);
         // TX completion may come either from
         //  1) regular send message, WCE wr_id points to chunk

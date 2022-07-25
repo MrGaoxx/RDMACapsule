@@ -24,6 +24,7 @@ int64_t get_quants(int64_t i, PerfHistogramCommon::scale_type_d st) {
             return int64_t(1) << (i - 1);
     }
     kassert(false && "Invalid scale type");
+    return -1;
 }
 
 int64_t PerfHistogramCommon::get_bucket_for_axis(int64_t value, const PerfHistogramCommon::axism_rdma_config_ig_d &ac) {
@@ -47,6 +48,7 @@ int64_t PerfHistogramCommon::get_bucket_for_axis(int64_t value, const PerfHistog
             return ac.m_buckets - 1;
     }
     kassert(false && "Invalid scale type");
+    return -1;
 }
 
 std::vector<std::pair<int64_t, int64_t>> PerfHistogramCommon::get_axis_bucket_ranges(const PerfHistogramCommon::axism_rdma_config_ig_d &ac) {
