@@ -161,7 +161,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t &peer_addr, const S
 int RDMAConnectedSocketImpl::handle_connection_established(bool need_set_fault) {
     std::cout << typeid(this).name() << " : " << __func__ << " start " << std::endl;
     // delete read event
-    // worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
+    worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
     if (1 == connected) {
         std::cout << typeid(this).name() << " : " << __func__ << " warnning: logic failed " << std::endl;
         if (need_set_fault) {
@@ -464,6 +464,8 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
 
     while (current_buffer != tx_buffers.end()) {
         isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
+        clientTimeRecords.Add(
+            TimeRecordTerm{reinterpret_cast<uint64_t>(*current_buffer), TimeRecordType::POST_SEND, Cycles::get_soft_timestamp_us()});
         isge[current_sge].length = (*current_buffer)->get_offset();
         isge[current_sge].lkey = (*current_buffer)->mr->lkey;
         // std::cout << " sending buffer: " << *current_buffer << " length: " << isge[current_sge].length << std::endl;
@@ -485,8 +487,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
     }
 
     ibv_send_wr *bad_tx_work_request = nullptr;
-
-    clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<uint64_t>(*current_buffer), TimeRecordType::POST_SEND, Cycles::get_soft_timestamp_us()});
 
     if (unlikely(ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request))) {
         std::cout << typeid(this).name() << " : " << __func__ << " failed to send data"

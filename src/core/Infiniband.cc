@@ -378,15 +378,11 @@ void Infiniband::QueuePair::gid_to_wire_gid(const ib_cm_meta_t &cm_meta_data, ch
  * < 0: means error
  */
 int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
+    std::cout << __func__ << std::endl;
     char msg[TCP_MSG_LEN];
     char gid[33];
     ssize_t r = ::read(socket_fd, &msg, sizeof(msg));
     // Drop incoming qpt
-
-    printf(msg, "%04x:%08x:%08x:%08x:%s");
-    std::cout << std::endl;
-    printf(msg, "%hx:%x:%x:%x:%s");
-    std::cout << std::endl;
 
     if (r < 0) {
         r = -errno;

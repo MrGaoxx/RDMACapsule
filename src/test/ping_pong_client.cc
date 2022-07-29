@@ -21,6 +21,7 @@ class RDMAPingPongClient {
     void Init();
     Connection* Connect(const char* serverAddr);
     void Send(Connection*);
+    void OnConnectionReadable(Connection*);
     void OnSendCompletion(Infiniband::MemoryManager::Chunk*);
 
    private:
@@ -31,6 +32,7 @@ class RDMAPingPongClient {
     int GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size);
 
     std::function<void(Connection*)> send_call;
+    std::function<void(Connection*)> readable_callback;
     Config* rdma_config;
     Context* context;
     Server server;
@@ -51,7 +53,9 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
 // ,average_latency("average_latency", 10, &logger)
 {
     send_call = std::bind(&RDMAPingPongClient::Send, this, std::placeholders::_1);
+    readable_callback = std::bind(&RDMAPingPongClient::OnConnectionReadable, this, std::placeholders::_1);
     server.conn_write_callback_p = &send_call;
+    server.conn_read_callback_p = &readable_callback;
     clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "client.log");
     // logger.SetLoggerName(std::to_string(Cycles::rdtsc()) + "client.log");
 }
@@ -114,13 +118,14 @@ void RDMAPingPongClient::Send(Connection*) {
         Cycles::sleep(1e6);
     }
 }
+void RDMAPingPongClient::OnConnectionReadable(Connection*) { std::cout << __func__ << std::endl; }
 
 void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex>{data_lock};
     clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<uint64_t>(chunk), TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
-    clientTimeRecords.Flush();
-    // uint64_t lat = chunk_timeinfos[chunk].send_completion_time - chunk_timeinfos[chunk].post_send_time;
-    //  average_latency.Add(lat);
+    // clientTimeRecords.Flush();
+    //  uint64_t lat = chunk_timeinfos[chunk].send_completion_time - chunk_timeinfos[chunk].post_send_time;
+    //   average_latency.Add(lat);
 }
 
 int main(int argc, char* argv[]) {

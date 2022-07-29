@@ -62,6 +62,7 @@ Connection *Server::create_connect(const entity_addr_t &addr) {
     Worker *w = stack->get_worker();
     auto conn = new Connection(context, this, w);
     conn->write_callback = conn_write_callback_p;
+    conn->read_callback = conn_read_callback_p;
     conn->connect(target);
     std::cout << typeid(this).name() << " : " << __func__ << " " << conn << " " << addr << std::endl;
     conns[target] = conn;
@@ -72,9 +73,10 @@ void Server::accept(Worker *w, ConnectedSocket cli_socket, const entity_addr_t &
     std::cout << typeid(this).name() << " " << __func__ << std::endl;
     std::lock_guard l{lock};
     auto conn = new Connection(context, this, w);
+    conn->read_callback = conn_read_callback_p;
+    conn->write_callback = conn_write_callback_p;
     conn->accept(std::move(cli_socket), listen_addr, peer_addr);
     accepting_conns.insert(conn);
-    conn->read_callback = conn_read_callback_p;
 }
 
 Server::~Server() {}

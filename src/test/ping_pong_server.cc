@@ -20,6 +20,7 @@ class RDMAPingPongServer {
     void Init();
     int Listen();
     void Poll(Connection*);
+    void OnConnectionWriteable(Connection*);
 
     static const uint32_t kRequestSize = 128;
     static const uint32_t kMaxNumRequest = 8;
@@ -35,6 +36,7 @@ class RDMAPingPongServer {
     entity_addr_t server_addr;
     entity_addr_t client_addr;
     std::function<void(Connection*)> poll_call;
+    std::function<void(Connection*)> conn_writeable_callback;
 };
 
 RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
@@ -46,7 +48,9 @@ RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
     poll_call = std::bind(&RDMAPingPongServer::Poll, this, std::placeholders::_1);
+    conn_writeable_callback = std::bind(&RDMAPingPongServer::OnConnectionWriteable, this, std::placeholders::_1);
     server.conn_read_callback_p = &poll_call;
+    server.conn_write_callback_p = &conn_writeable_callback;
 }
 RDMAPingPongServer::~RDMAPingPongServer() {
     delete rdma_config;
@@ -84,6 +88,7 @@ void RDMAPingPongServer::Poll(Connection*) {
         }
     }
 }
+void RDMAPingPongServer::OnConnectionWriteable(Connection*) { std::cout << __func__ << std::endl; }
 
 // std::ostream& operator<<(std::ostream& os, timespec& tv) { return os << "tv.tv_sec: " << tv.tv_sec << " tv.tv_nsec: " << tv.tv_nsec << std::endl; }
 

@@ -71,8 +71,8 @@ void Connection::connect(const entity_addr_t &addr) {
 
 void Connection::process() {
     std::lock_guard<std::mutex> l(lock);
-    std::cout << typeid(this).name() << this << " cm_id:" << mc_id << " peer_addr " << peer_addr << " : " << __func__ << " state: " << state
-              << std::endl;
+    std::cout << typeid(this).name() << __func__ << " cm_id:" << mc_id << " peer_addr " << peer_addr << " : "
+              << " state: " << state << std::endl;
 
     switch (state) {
         case STATE_NONE: {
@@ -89,16 +89,18 @@ void Connection::process() {
             }
 
             SocketOptions opts;
-            opts.nonblock = false;
+            opts.nonblock = true;
             opts.priority = context->m_rdma_config_->m_tcp_priority_;
             opts.connect_bind_addr = context->m_rdma_config_->m_addr;
 
             ssize_t r = worker->connect(peer_addr, opts, &cs);
-            center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
             if (unlikely(r < 0)) {
                 std::cout << __func__ << ": worker connect failed" << std::endl;
                 return;
             }
+            kassert(cs.is_connected() <= 0);
+            center->create_file_event(cs.fd(), EVENT_READABLE, read_callback_handler);
+            center->create_file_event(cs.fd(), EVENT_WRITABLE, read_handler);
             state = STATE_CONNECTING_RE;
             return;
         }
@@ -117,19 +119,17 @@ void Connection::process() {
                 }
                 return;
             }
-
-            center->delete_file_event(cs.fd(), EVENT_WRITABLE);
-            center->dispatch_event_external(write_callback_handler);
-            std::cout << typeid(this).name() << " : " << __func__ << " connect successfully, ready to send banner" << std::endl;
             state = STATE_CONNECTION_ESTABLISHED;
+            center->delete_file_event(cs.fd(), EVENT_WRITABLE);
+            std::cout << typeid(this).name() << " : " << __func__ << " connect successfully, ready to send banner" << std::endl;
+            center->dispatch_event_external(write_callback_handler);
             break;
         }
 
         case STATE_ACCEPTING: {
-            center->create_file_event(cs.fd(), EVENT_READABLE, read_handler);
+            center->create_file_event(cs.fd(), EVENT_READABLE, read_callback_handler);
+            center->dispatch_event_external(write_callback_handler);
             state = STATE_CONNECTION_ESTABLISHED;
-
-            center->dispatch_event_external(read_callback_handler);
             break;
         }
 

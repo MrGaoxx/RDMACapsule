@@ -156,7 +156,7 @@ int NetHandler::generic_connect(Context *context, const entity_addr_t &addr, con
 
     if (nonblock) {
         ret = set_nonblock(s);
-        if (ret < 0) {
+        if (unlikely(ret < 0)) {
             close(s);
             return ret;
         }
@@ -168,7 +168,7 @@ int NetHandler::generic_connect(Context *context, const entity_addr_t &addr, con
         if (context->m_rdma_config_->m_bind_before_connect_ && (!addr.is_blank_ip())) {
             addr.set_port(0);
             ret = ::bind(s, addr.get_sockaddr(), addr.get_sockaddr_len());
-            if (ret < 0) {
+            if (unlikely(ret < 0)) {
                 ret = errno;
                 std::cout << typeid(NetHandler).name() << " : " << __func__ << " client bind error "
                           << ", " << cpp_strerror(ret) << std::endl;

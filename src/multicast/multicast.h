@@ -162,6 +162,7 @@ class MulticastDaemon : public Server {
     void accept(Worker *w, ConnectedSocket cli_socket, const entity_addr_t &listen_addr, const entity_addr_t &peer_addr) override;
 
     std::function<void(Connection *)> mc_client_conn_read_callback;
+    std::function<void(Connection *)> mc_client_conn_write_callback;
     std::function<void(Connection *)> mc_server_conn_read_callback;
     std::function<void(Connection *)> mc_server_conn_write_callback;
 
@@ -175,9 +176,10 @@ class MulticastDaemon : public Server {
     SwitchTableWritter p4_writter;
 
     std::mutex io_lock;
-    void process_client_read(Connection *);
-    void process_server_read(Connection *);
-    void handle_server_established(Connection *);
+    void process_client_readable(Connection *);
+    void process_client_writeable(Connection *);
+    void process_server_readable(Connection *);
+    void process_server_writeable(Connection *);
 
     void check_and_send_handshake_to_client(Connection *, mc_id_t, multicast_cm_meta_t &, MCState &);
     void send_handshake_to_server(mc_id_t, multicast_cm_meta_t &, MCState &, int i);
