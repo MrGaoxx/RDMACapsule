@@ -98,14 +98,14 @@ void RDMAPingPongClient::Send(Connection*) {
         }
         // uint64_t now = Cycles::rdtsc();
         uint64_t now = Cycles::get_soft_timestamp_us();
-        for (auto& chunk : buffers) {
+        for (auto chunk : buffers) {
             std::lock_guard<std::mutex>{data_lock};
             clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<uint64_t>(chunk), TimeRecordType::APP_SEND_BEFORE, now});
         }
         server.Send(server_addr, bl);
 
         now = Cycles::get_soft_timestamp_us();
-        for (auto& chunk : buffers) {
+        for (auto chunk : buffers) {
             std::lock_guard<std::mutex>{data_lock};
             clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<uint64_t>(chunk), TimeRecordType::APP_SEND_AFTER, now});
         }
