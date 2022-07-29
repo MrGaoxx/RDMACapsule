@@ -12,13 +12,15 @@
 #include "multicast/multicast.h"
 #endif
 
+#ifndef NDEBUG
 #define kassert(x)                                        \
     if (!(x)) {                                           \
         std::cout << "assert failed " << #x << std::endl; \
         abort();                                          \
     }
-
-//#define kassert(x)
+#else
+#define kassert(x)
+#endif
 
 inline std::string cpp_strerror(int err) {
     char buf[128];

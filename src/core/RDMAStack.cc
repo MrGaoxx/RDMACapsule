@@ -26,7 +26,7 @@
 #include "common/statistic.h"
 
 Logger clientLogger;
-static const uint32_t MAX_RECORD_TIME = 1e4;
+static const uint32_t MAX_RECORD_TIME = 1e2;
 OriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords("RequestTimeRecord", MAX_RECORD_TIME, &clientLogger);
 
 RDMADispatcher::~RDMADispatcher() {
@@ -297,6 +297,7 @@ void RDMADispatcher::polling() {
 
             if (!num_qp_conn && done && dead_queue_pairs.empty()) break;
 
+            /*
             if (Cycles::get_soft_timestamp_us() - last_inactive > context->m_rdma_config_->m_rdma_polling_us_) {
                 handle_async_event();
                 if (!rearmed) {
@@ -330,7 +331,7 @@ void RDMADispatcher::polling() {
                 last_inactive = Cycles::get_soft_timestamp_us();
                 perf_logger->set(l_msgr_rdma_polling, 1);
                 rearmed = false;
-            }
+            }*/
         }
     }
 }

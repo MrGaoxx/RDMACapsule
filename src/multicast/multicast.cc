@@ -3,12 +3,11 @@
 MulticastDaemon::MulticastDaemon(Context *c) : Server(c), mc_id(rand() % 256) {
     // multicast_map[entity_addr_t("172.16.0.11", 30000)] = 1;
     multicast_addrs[mc_id] = {entity_addr_t("172.16.0.15", 30000), entity_addr_t("172.16.0.11", 30000)};
-
     // mc_id++;
-
-    mc_client_conn_read_callback = std::bind(&MulticastDaemon::process_client_read, this, std::placeholders::_1);
-    mc_server_conn_read_callback = std::bind(&MulticastDaemon::process_server_read, this, std::placeholders::_1);
-    mc_server_conn_write_callback = std::bind(&MulticastDaemon::handle_server_established, this, std::placeholders::_1);
+    mc_client_conn_read_callback = std::bind(&MulticastDaemon::process_client_readable, this, std::placeholders::_1);
+    mc_client_conn_write_callback = std::bind(&MulticastDaemon::process_client_writeable, this, std::placeholders::_1);
+    mc_server_conn_read_callback = std::bind(&MulticastDaemon::process_server_readable, this, std::placeholders::_1);
+    mc_server_conn_write_callback = std::bind(&MulticastDaemon::process_server_writeable, this, std::placeholders::_1);
     {
         std::cout << "Switch address is " << p4_writter.get_switch_addr() << std::endl;
         // p4_writter.init_switch_table();
@@ -24,7 +23,7 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
     accepting_conn->accept(std::move(cli_socket), listen_addr, peer_addr);
     accepting_conns.insert(accepting_conn);
     accepting_conn->read_callback = &mc_client_conn_read_callback;
-    // accepting_conn->write_callback = &mc_conn_write_callback;
+    accepting_conn->write_callback = &mc_client_conn_write_callback;
 
     std::lock_guard data{data_lock};
     accepting_conn->set_mc_id(mc_id);
@@ -55,7 +54,7 @@ void MulticastDaemon::accept(Worker *w, ConnectedSocket cli_socket, const entity
     mc_id++;
 }
 
-void MulticastDaemon::process_client_read(Connection *conn) {
+void MulticastDaemon::process_client_readable(Connection *conn) {
     std::cout << __func__ << std::endl;
     char msg[TCP_MSG_LEN];
     uint32_t read_size = 0;
@@ -95,13 +94,13 @@ void MulticastDaemon::process_client_read(Connection *conn) {
                     if (mc_state.server_state[i] == MCState::ServerState::STATE_CONNECTED) {
                         send_handshake_to_server(mc_id, mc_cm_meta, mc_state, i);
                         mc_state.server_state[i] = MCState::ServerState::STATE_HANDSHAKE_SENT;
-                        multicast_connections[mc_id][i + 1]->async_read();
+                        // multicast_connections[mc_id][i + 1]->async_read();
                     }
                 }
                 break;
             }
             case MCState::ClientState::STATE_HANDSHAKE_SENT: {
-                kassert(mc_cm_meta.sender_local_qpn == mc_id);
+                kassert(mc_cm_meta.sender_peer_qpn == mc_id);
                 // send_handshake_to_client(conn, msg, mc_id, mc_cm_meta, mc_state);
                 mc_state.client_state = MCState::ClientState::STATE_ACK_RECEIVED;
                 break;
@@ -115,7 +114,7 @@ void MulticastDaemon::process_client_read(Connection *conn) {
     }
 }
 
-void MulticastDaemon::process_server_read(Connection *conn) {
+void MulticastDaemon::process_server_readable(Connection *conn) {
     std::cout << __func__ << std::endl;
     char msg[TCP_MSG_LEN];
     uint32_t read_size = 0;
@@ -141,7 +140,7 @@ void MulticastDaemon::process_server_read(Connection *conn) {
         sscanf(msg, "%hx:%x:%x:%x:%s", &mc_cm_meta.receiver_lid[index], &mc_cm_meta.receiver_local_qpn[index], &(mc_cm_meta.receiver_psn[index]),
                &(mc_cm_meta.receiver_peer_qpn[index]), temp_gid);
         multicast_cm_meta_t::wire_gid_to_gid(temp_gid, &mc_cm_meta.receiver_gid[index]);
-        std::cout << __func__ << "RECEIVED SERVER " << mc_id << ":" << index << " HANDSHAKE MSG" << mc_cm_meta << std::endl;
+        std::cout << __func__ << " RECEIVED SERVER " << mc_id << ":" << index << " HANDSHAKE MSG" << mc_cm_meta << std::endl;
 
         switch (mc_state.server_state[index]) {
             case MCState::ServerState::STATE_INIT:
@@ -166,6 +165,9 @@ void MulticastDaemon::check_and_send_handshake_to_client(Connection *conn, mc_id
     switch (mc_state.client_state) {
         case MCState::ClientState::STATE_HANDSHAKE_RECEIVED:
             break;
+        case MCState::ClientState::STATE_HANDSHAKE_SENT:
+            std::cout << __func__ << " handshake already sent" << std::endl;
+            return;
         default:
             std::cout << __func__ << " failed, client state: " << mc_state.client_state << std::endl;
             return;
@@ -234,7 +236,7 @@ void MulticastDaemon::send_handshake_to_server(mc_id_t mc_id, multicast_cm_meta_
             mc_cm_meta.receiver_local_qpn[i], temp_gid);
 
     std::cout << "Sending handshake msgs to mc_id:" << mc_id << " No." << i << " server" << std::endl;
-    std::cout << typeid(this).name() << " : " << __func__ << " sending: " << mc_cm_meta.sender_lid << ", " << mc_cm_meta.sender_peer_qpn << ", "
+    std::cout << typeid(this).name() << " : " << __func__ << " sending: " << mc_cm_meta.sender_lid << ", " << mc_cm_meta.sender_local_qpn << ", "
               << mc_cm_meta.sender_psn << ", " << mc_cm_meta.receiver_local_qpn[i] << ", " << temp_gid << std::endl;
 
     {
@@ -257,7 +259,9 @@ void MulticastDaemon::send_handshake_to_server(mc_id_t mc_id, multicast_cm_meta_
     }
 }
 
-void MulticastDaemon::handle_server_established(Connection *conn) {
+void MulticastDaemon::process_client_writeable(Connection *conn) { std::cout << __func__ << std::endl; }
+
+void MulticastDaemon::process_server_writeable(Connection *conn) {
     std::cout << __func__ << std::endl;
     uint64_t mc_id = conn->get_mc_id();
     auto &mc_state = multicast_state[mc_id];
@@ -268,7 +272,6 @@ void MulticastDaemon::handle_server_established(Connection *conn) {
     if (mc_state.client_state == MCState::ClientState::STATE_HANDSHAKE_RECEIVED) {  // client msg befor connection established, sent here
         send_handshake_to_server(mc_id, mc_cm_meta, mc_state, index);
         mc_state.server_state[index] = MCState::ServerState::STATE_HANDSHAKE_SENT;
-        conn->async_read();
     } else {
         std::cout << mc_id << " conn " << index << " waiting client msg to send" << std::endl;
     }
