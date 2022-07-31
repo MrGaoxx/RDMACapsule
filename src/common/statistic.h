@@ -201,7 +201,9 @@ class OriginalLoggerTerm : public ContainerLoggerTerm<T_SUM, T> {
     using ContainerLoggerTerm<T_SUM, T>::Add;
 
    protected:
-    virtual bool should_flush() override { return max_flushtime == ContainerLoggerTerm<T_SUM, T>::m_sum.size(); }
+    virtual bool should_flush() override { 
+        std::cout << "log num is : " << ContainerLoggerTerm<T_SUM, T>::m_sum.size() << std::endl;
+        return max_flushtime == ContainerLoggerTerm<T_SUM, T>::m_sum.size(); }
     virtual void flush() override {
         ContainerLoggerTerm<T_SUM, T>::m_logger->m_output << ContainerLoggerTerm<T_SUM, T>::m_sum << std::endl;
         ContainerLoggerTerm<T_SUM, T>::m_sum.clear();
