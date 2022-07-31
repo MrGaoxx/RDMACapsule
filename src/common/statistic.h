@@ -237,6 +237,7 @@ struct TimeRecords {
             records.insert(std::pair(term.id_, std::vector<uint64_t>(64, 0)));
         }
         records[term.id_][term.index_] = term.timestamp_;
+        std::cout << "after pushed back, size is : " << records.size() << std::endl;
     };
     void emplace_back(TimeRecordTerm& term) { push_back(term); }
     void resize(std::size_t size) {}
