@@ -504,7 +504,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         }
 
         RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
-        clientTimeRecords.Add(TimeRecordTerm{response->wr_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
+        clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<Chunk *>(response->wr_id)->log_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
         conn->txc_callback(reinterpret_cast<Chunk *>(response->wr_id));
         auto chunk = reinterpret_cast<Chunk *>(response->wr_id);
         // TX completion may come either from

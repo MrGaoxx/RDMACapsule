@@ -238,7 +238,7 @@ struct TimeRecords {
             std::cout << "after pushed back, size is : " << records.size() << std::endl;
         }
         records[term.id_][term.index_] = term.timestamp_;
-        std::cout << "push back over " << std::endl;
+        // std::cout << "push back over " << std::endl;
     };
     void emplace_back(TimeRecordTerm& term) { push_back(term); }
     void resize(std::size_t size) {}
