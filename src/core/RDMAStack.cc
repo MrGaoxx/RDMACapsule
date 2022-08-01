@@ -26,7 +26,7 @@
 #include "common/statistic.h"
 
 Logger clientLogger;
-static const uint32_t MAX_RECORD_TIME = 1e1;
+static const uint32_t MAX_RECORD_TIME = 1e2;
 OriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords("RequestTimeRecord", MAX_RECORD_TIME, &clientLogger);
 
 RDMADispatcher::~RDMADispatcher() {

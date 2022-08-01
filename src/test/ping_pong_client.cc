@@ -104,7 +104,7 @@ void RDMAPingPongClient::Send(Connection*) {
         uint64_t now = Cycles::get_soft_timestamp_us();
         for (auto chunk : buffers) {
             std::lock_guard<std::mutex>{data_lock};
-            chunk->log_id++;
+            
             std::cout << "current log id is : " << chunk->log_id << std::endl;
             clientTimeRecords.Add(TimeRecordTerm{chunk->log_id, TimeRecordType::APP_SEND_BEFORE, now});
         }
@@ -125,6 +125,7 @@ void RDMAPingPongClient::OnConnectionReadable(Connection*) { std::cout << __func
 void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex>{data_lock};
     clientTimeRecords.Add(TimeRecordTerm{chunk->log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
+    chunk->log_id++;
     // clientTimeRecords.Flush();
     //  uint64_t lat = chunk_timeinfos[chunk].send_completion_time - chunk_timeinfos[chunk].post_send_time;
     //   average_latency.Add(lat);
