@@ -105,6 +105,7 @@ void RDMAPingPongClient::Send(Connection*) {
         for (auto chunk : buffers) {
             std::lock_guard<std::mutex>{data_lock};
             chunk->log_id++;
+            std::cout << "current log id is : " << chunk->log_id << std::endl;
             clientTimeRecords.Add(TimeRecordTerm{chunk->log_id, TimeRecordType::APP_SEND_BEFORE, now});
         }
         server.Send(server_addr, bl);
