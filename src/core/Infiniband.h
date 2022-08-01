@@ -236,7 +236,7 @@ class Infiniband {
             uint32_t bound;
             char *buffer;  // TODO: remove buffer/refactor TX
             char data[0];
-            static uint64_t log_id;
+            static uint64_t log_id = 0;
         };
 
         class Cluster {
