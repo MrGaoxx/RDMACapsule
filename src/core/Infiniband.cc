@@ -618,6 +618,8 @@ Infiniband::ProtectionDomain::ProtectionDomain(Context *context, Device *device)
 
 Infiniband::ProtectionDomain::~ProtectionDomain() { ibv_dealloc_pd(pd); }
 
+uint64_t Infiniband::MemoryManager::Chunk::log_id = 0;
+
 Infiniband::MemoryManager::Chunk::Chunk(ibv_mr *m, uint32_t bytes, char *buffer, uint32_t offset, uint32_t bound, uint32_t lkey, QueuePair *qp)
     : mr(m), qp(qp), lkey(lkey), bytes(bytes), offset(offset), bound(bound), buffer(buffer) {}
 
