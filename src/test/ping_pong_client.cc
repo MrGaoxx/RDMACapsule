@@ -104,8 +104,7 @@ void RDMAPingPongClient::Send(Connection*) {
         uint64_t now = Cycles::get_soft_timestamp_us();
         for (auto chunk : buffers) {
             std::lock_guard<std::mutex>{data_lock};
-            
-            std::cout << "current log id is : " << chunk->log_id << std::endl;
+            // std::cout << "current log id is : " << chunk->log_id << std::endl;
             clientTimeRecords.Add(TimeRecordTerm{chunk->log_id, TimeRecordType::APP_SEND_BEFORE, now});
         }
         server.Send(server_addr, bl);

@@ -202,7 +202,7 @@ class OriginalLoggerTerm : public ContainerLoggerTerm<T_SUM, T> {
 
    protected:
     virtual bool should_flush() override { 
-        std::cout << "log num is : " << ContainerLoggerTerm<T_SUM, T>::m_sum.size() << std::endl;
+        // std::cout << "log num is : " << ContainerLoggerTerm<T_SUM, T>::m_sum.size() << std::endl;
         return max_flushtime == ContainerLoggerTerm<T_SUM, T>::m_sum.size(); }
     virtual void flush() override {
         ContainerLoggerTerm<T_SUM, T>::m_logger->m_output << ContainerLoggerTerm<T_SUM, T>::m_sum << std::endl;
@@ -235,7 +235,7 @@ struct TimeRecords {
     void push_back(TimeRecordTerm& term) {
         if (unlikely(records.count(term.id_) == 0)) {
             records.insert(std::pair(term.id_, std::vector<uint64_t>(64, 0)));
-            std::cout << "after pushed back, size is : " << records.size() << std::endl;
+            // std::cout << "after pushed back, size is : " << records.size() << std::endl;
         }
         records[term.id_][term.index_] = term.timestamp_;
         // std::cout << "push back over " << std::endl;
