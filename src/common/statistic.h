@@ -201,9 +201,7 @@ class OriginalLoggerTerm : public ContainerLoggerTerm<T_SUM, T> {
     using ContainerLoggerTerm<T_SUM, T>::Add;
 
    protected:
-    virtual bool should_flush() override { 
-        // std::cout << "log num is : " << ContainerLoggerTerm<T_SUM, T>::m_sum.size() << std::endl;
-        return max_flushtime == ContainerLoggerTerm<T_SUM, T>::m_sum.size(); }
+    virtual bool should_flush() override { return max_flushtime == ContainerLoggerTerm<T_SUM, T>::m_sum.size(); }
     virtual void flush() override {
         ContainerLoggerTerm<T_SUM, T>::m_logger->m_output << ContainerLoggerTerm<T_SUM, T>::m_sum << std::endl;
         ContainerLoggerTerm<T_SUM, T>::m_sum.clear();
@@ -258,13 +256,42 @@ inline std::ostream& operator<<(std::ostream& os, std::pair<uint64_t, std::vecto
 };
 
 inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
+    double whole_delay_sum,delay1_sum,delay2_sum,delay3_sum,delay4_sum;
+    uint64_t whole_delay,delay1,delay2,delay3,delay4;
+    uint32_t nums = 0;
     for (auto& record : trs.records) {
         os << "id: " << record.first << " timestamps:";
         for (std::size_t i = 0; i < record.second.size(); i++) {
+            if(record.second[i] == 0){
+                break;
+            }
             os << " " << record.second[i];
         }
+        whole_delay = record.second[4] - record.second[0];
+        delay1 = record.second[1] - record.second[0];
+        delay2 = record.second[2] - record.second[1];
+        delay3 = record.second[3] - record.second[2];
+        delay4 = record.second[4] - record.second[3];
+        if (whole_delay > 0 && whole_delay < 1000)
+        {
+            whole_delay_sum += whole_delay;
+            delay1_sum += delay1;
+            delay2_sum += delay2;
+            delay3_sum += delay3;
+            delay4_sum += delay4;
+            nums++;
+        }
+        
         os << "\n";
     }
+    double average_whole_delay = whole_delay_sum/nums;
+    double average_delay1 = delay1_sum/nums;
+    double average_delay2 = delay2_sum/nums;
+    double average_delay3 = delay3_sum/nums;
+    double average_delay4 = delay4_sum/nums;
+
+    std::cout << "average whole delay: " << average_whole_delay <<", average delay 1: " << average_delay1 
+                <<", average delay 2: " << average_delay2 <<", average delay 3: " << average_delay3 <<", average delay 4: " << average_delay4 << std::endl;
     os << std::endl;
     return os;
 };
