@@ -256,8 +256,8 @@ inline std::ostream& operator<<(std::ostream& os, std::pair<uint64_t, std::vecto
 };
 
 inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
-    double whole_delay_sum,delay1_sum,delay2_sum,delay3_sum,delay4_sum;
-    uint64_t whole_delay,delay1,delay2,delay3,delay4;
+    double whole_delay_sum = 0,delay1_sum = 0,delay2_sum = 0,delay3_sum = 0,delay4_sum = 0;
+    uint64_t whole_delay = 0,delay1 = 0,delay2 = 0,delay3 = 0,delay4 = 0;
     uint32_t nums = 0;
     for (auto& record : trs.records) {
         os << "id: " << record.first << " timestamps:";
@@ -290,7 +290,7 @@ inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
     double average_delay3 = delay3_sum/nums;
     double average_delay4 = delay4_sum/nums;
 
-    std::cout << "average whole delay: " << average_whole_delay <<", average delay 1: " << average_delay1 
+    os << "average whole delay: " << average_whole_delay <<", average delay 1: " << average_delay1 
                 <<", average delay 2: " << average_delay2 <<", average delay 3: " << average_delay3 <<", average delay 4: " << average_delay4 << std::endl;
     os << std::endl;
     return os;
