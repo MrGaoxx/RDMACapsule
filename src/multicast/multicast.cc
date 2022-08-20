@@ -2,7 +2,7 @@
 
 MulticastDaemon::MulticastDaemon(Context *c) : Server(c), mc_id(rand() % 256) {
     // multicast_map[entity_addr_t("172.16.0.11", 30000)] = 1;
-    multicast_addrs[mc_id] = {entity_addr_t("172.16.0.11", 30000), entity_addr_t("172.16.0.16", 30000)};
+    multicast_addrs[mc_id] = {entity_addr_t("172.16.0.15", 30000), entity_addr_t("172.16.0.16", 30000)};
     // mc_id++;
     mc_client_conn_read_callback = std::bind(&MulticastDaemon::process_client_readable, this, std::placeholders::_1);
     mc_client_conn_write_callback = std::bind(&MulticastDaemon::process_client_writeable, this, std::placeholders::_1);
