@@ -27,7 +27,7 @@
 
 Logger clientLogger;
 static const uint32_t MAX_RECORD_TIME = 1e2;
-OriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords("RequestTimeRecord", MAX_RECORD_TIME, &clientLogger);
+LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords("RequestTimeRecord", MAX_RECORD_TIME, &clientLogger);
 
 RDMADispatcher::~RDMADispatcher() {
     std::cout << typeid(this).name() << " : " << __func__ << " destructing rdma dispatcher" << std::endl;
@@ -504,7 +504,8 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         }
 
         RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
-        clientTimeRecords.Add(TimeRecordTerm{reinterpret_cast<Chunk *>(response->wr_id)->log_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
+        clientTimeRecords.Add(
+            TimeRecordTerm{reinterpret_cast<Chunk *>(response->wr_id)->log_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
         conn->txc_callback(reinterpret_cast<Chunk *>(response->wr_id));
         auto chunk = reinterpret_cast<Chunk *>(response->wr_id);
         // TX completion may come either from

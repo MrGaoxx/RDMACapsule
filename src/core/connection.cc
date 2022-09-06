@@ -54,7 +54,7 @@ class C_write_callback : public EventCallback {
 };
 
 Connection::Connection(Context *context, Server *s, Worker *w)
-    : state(STATE_NONE), stack(s->get_network_stack()), context(context), worker(w), center(&w->center), server(s) {
+    : mc_id(0), state(STATE_NONE), stack(s->get_network_stack()), context(context), worker(w), center(&w->center), server(s) {
     read_handler = new C_handle_read(this);
     read_callback_handler = new C_read_callback(this);
     write_callback_handler = new C_write_callback(this);

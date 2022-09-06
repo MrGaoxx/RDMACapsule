@@ -54,6 +54,8 @@ struct entity_addr_t {
         sockaddr_in6 sin6;
     } u;
 
+    char ip_char[20];
+
     static std::string_view get_type_name(type_t t) {
         switch (t) {
             case type_t::TYPE_SERVER:

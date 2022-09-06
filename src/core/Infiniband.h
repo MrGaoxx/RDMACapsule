@@ -31,7 +31,7 @@
 #include "common/perf_counters.h"
 #include "network/net_handler.h"
 
-static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000000000000000000000000000");
+static const uint32_t TCP_MSG_LEN = sizeof("0000:00000000:00000000:00000000:00000000:0000:00000000:0000:00000000000000000000000000000000");
 
 #define HUGE_PAGE_SIZE_2MB (2 * 1024 * 1024)
 #define ALIGN_TO_PAGE_2MB(x) (((x) + (HUGE_PAGE_SIZE_2MB - 1)) & ~(HUGE_PAGE_SIZE_2MB - 1))

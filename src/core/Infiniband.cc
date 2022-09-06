@@ -394,7 +394,10 @@ int Infiniband::QueuePair::recv_cm_meta(Context *context, int socket_fd) {
                   << " expected (" << sizeof(msg) << ")" << std::endl;
         r = -EINVAL;
     } else {  // valid message
-        sscanf(msg, "%hx:%x:%x:%x:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn), gid);
+        uint32_t dummy1;
+        uint16_t dummy2;
+        sscanf(msg, "%hx:%x:%x:%x:%x:%hx:%x:%hx:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn),
+               &dummy1, &dummy2, &dummy1, &dummy2, gid);
         wire_gid_to_gid(gid, &peer_cm_meta);
         std::cout << typeid(this).name() << " : " << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn << ", "
                   << peer_cm_meta.psn << ", " << peer_cm_meta.peer_qpn << ", " << gid << std::endl;
@@ -410,7 +413,10 @@ int Infiniband::QueuePair::send_cm_meta(Context *context, int socket_fd) {
     char gid[33];
 retry:
     gid_to_wire_gid(local_cm_meta, gid);
-    sprintf(msg, "%04x:%08x:%08x:%08x:%s", local_cm_meta.lid, local_cm_meta.local_qpn, local_cm_meta.psn, local_cm_meta.peer_qpn, gid);
+    // %04x : % 08x : % 08x : % 08x : % 08x : % 04x : % 08x : %04x : % s
+    sprintf(msg, "%hx:%x:%x:%x:%x:%hx:%x:%hx:%s", local_cm_meta.lid, local_cm_meta.local_qpn, local_cm_meta.psn, local_cm_meta.peer_qpn,
+            context->m_rdma_config_->m_mc_group.ip_addr_member_1, context->m_rdma_config_->m_mc_group.port_member_1,
+            context->m_rdma_config_->m_mc_group.ip_addr_member_2, context->m_rdma_config_->m_mc_group.port_member_2, gid);
     std::cout << typeid(this).name() << " : " << __func__ << " sending: " << local_cm_meta.lid << ", " << local_cm_meta.local_qpn << ", "
               << local_cm_meta.psn << ", " << local_cm_meta.peer_qpn << ", " << gid << std::endl;
     r = ::write(socket_fd, msg, sizeof(msg));

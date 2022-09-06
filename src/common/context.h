@@ -20,9 +20,12 @@ namespace common::PerfCounter {
 class PerfCountersCollection;
 }
 
-#ifdef HAVE_MULTICAST
-class MulticastConnectGroup;
-#endif
+struct MulticastConnectGroup {
+    uint32_t ip_addr_member_1;
+    uint16_t port_member_1;
+    uint32_t ip_addr_member_2;
+    uint16_t port_member_2;
+};
 
 struct Config {
     Config(std::string& filename);
@@ -34,7 +37,7 @@ struct Config {
     bool m_use_rdma_cm_ = false;
     bool m_rdma_enable_hugepage_ = false;
     bool m_rdma_support_srq_ = false;
-    std::string m_rdma_device_name_ = "mlx_5";
+    std::string m_rdma_device_name_ = "mlx5_0";
 
     uint8_t m_gid_index_ = 3;
     uint8_t m_rdma_dscp_ = 0;
@@ -62,9 +65,9 @@ struct Config {
     std::string m_ip_addr;
     uint16_t m_listen_port;
     entity_addr_t m_addr;
-#ifdef HAVE_MULTICAST
-    MulticastManagementConnectGroup*;
-#endif
+
+    MulticastConnectGroup m_mc_group;
+
    private:
     void parse(std::string& key, std::string& val);
 };
@@ -137,6 +140,22 @@ inline void Config::parse(std::string& key, std::string& val) {
     } else if (key == "RDMA_THREADS_NUM") {
         m_op_threads_num_ = std::stoi(val);
         std::cout << " m_op_threads_num = " << m_op_threads_num_ << std::endl;
+    } else if (key == "MULTICAST_GROUP_IP1") {
+        sockaddr_in sa;
+        inet_pton(AF_INET, val.c_str(), &sa.sin_addr);
+        m_mc_group.ip_addr_member_1 = sa.sin_addr.s_addr;
+        std::cout << " MULTICAST_GROUP_IP1 = " << m_mc_group.ip_addr_member_1 << std::endl;
+    } else if (key == "MULTICAST_GROUP_IP2") {
+        sockaddr_in sa;
+        inet_pton(AF_INET, val.c_str(), &sa.sin_addr);
+        m_mc_group.ip_addr_member_2 = sa.sin_addr.s_addr;
+        std::cout << " MULTICAST_GROUP_IP2 = " << m_mc_group.ip_addr_member_2 << std::endl;
+    } else if (key == "MULTICAST_GROUP_PORT1") {
+        m_mc_group.port_member_1 = static_cast<uint16_t>(std::stoi(val));
+        std::cout << " MULTICAST_GROUP_PORT1 = " << m_mc_group.port_member_1 << std::endl;
+    } else if (key == "MULTICAST_GROUP_PORT2") {
+        m_mc_group.port_member_2 = static_cast<uint16_t>(std::stoi(val));
+        std::cout << " MULTICAST_GROUP_PORT2 = " << m_mc_group.port_member_2 << std::endl;
     }
     return;
 }

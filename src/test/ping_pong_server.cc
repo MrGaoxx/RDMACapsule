@@ -22,7 +22,7 @@ class RDMAPingPongServer {
     void Poll(Connection*);
     void OnConnectionWriteable(Connection*);
 
-    static const uint32_t kRequestSize = 128;
+    static const uint32_t kRequestSize = 32768;
     static const uint32_t kMaxNumRequest = 8;
     char recv_buffer[kRequestSize][kMaxNumRequest];
     uint8_t pos;
@@ -40,11 +40,11 @@ class RDMAPingPongServer {
 };
 
 RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
-    : listening(false),
+    : pos(0),
+      listening(false),
       rdma_config(new Config(configFileName)),
       context(new Context(rdma_config)),
       server(context),
-      pos(0),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
     poll_call = std::bind(&RDMAPingPongServer::Poll, this, std::placeholders::_1);

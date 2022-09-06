@@ -191,7 +191,7 @@ class MulticastDaemon : public Server {
         }
         return i;
     }
-    mc_id_t mc_id;
+    mc_id_t m_mc_id;
 };
 ;
 
