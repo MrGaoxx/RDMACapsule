@@ -68,6 +68,9 @@ struct Config {
 
     MulticastConnectGroup m_mc_group;
 
+    uint32_t m_request_size;
+    uint32_t m_request_num;
+
    private:
     void parse(std::string& key, std::string& val);
 };
@@ -159,6 +162,12 @@ inline void Config::parse(std::string& key, std::string& val) {
     } else if (key == "GID_INDEX") {
         m_gid_index_ = static_cast<uint16_t>(std::stoi(val));
         std::cout << " GID_INDEX = " << m_gid_index_ << std::endl;
+    } else if (key == "REQUEST_SIZE") {
+        m_request_size = static_cast<uint32_t>(std::stoi(val));
+        std::cout << " REQUEST_SIZE = " << m_request_size << std::endl;
+    } else if (key == "REQUEST_NUM") {
+        m_request_num = static_cast<uint32_t>(std::stoi(val));
+        std::cout << " REQUEST_NUM " << m_request_num << std::endl;
     }
     return;
 }

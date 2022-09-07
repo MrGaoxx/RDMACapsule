@@ -26,9 +26,8 @@ class RDMAPingPongClient {
     void OnSendCompletion(Infiniband::MemoryManager::Chunk*);
 
    private:
-    uint32_t send_iterations = 1024;
-    static const uint32_t kRequestSize = 32768;
-    static const uint32_t kNumRequest = 8;
+    uint32_t kRequestSize = 32768;
+    uint32_t kNumRequest = 8;
 
     int GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size);
 
@@ -51,15 +50,15 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
       context(new Context(rdma_config)),
       server(context),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
-      client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0)
-// ,average_latency("average_latency", 10, &logger)
-{
+      client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
     send_call = std::bind(&RDMAPingPongClient::SendBatches, this, std::placeholders::_1);
     readable_callback = std::bind(&RDMAPingPongClient::OnConnectionReadable, this, std::placeholders::_1);
     server.conn_write_callback_p = &send_call;
     server.conn_read_callback_p = &readable_callback;
     clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "client.log");
     data = new char[kRequestSize];
+    kRequestSize = context->m_rdma_config_->m_request_size;
+    kNumRequest = context->m_rdma_config_->m_request_num;
 }
 
 void RDMAPingPongClient::Init() { server.start(); }
