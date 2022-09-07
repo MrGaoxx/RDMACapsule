@@ -103,7 +103,7 @@ void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v) {
 
 void RDMAConnectedSocketImpl::get_wc(std::vector<ibv_wc> &w) {
     std::lock_guard l{lock};
-    if (wc.empty()) return;
+    if (unlikely(wc.empty())) return;
     w.swap(wc);
 }
 
@@ -349,23 +349,27 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
 }
 
 ssize_t RDMAConnectedSocketImpl::send(BufferList &bl, bool more) {
-    if (error) {
+    if (unlikely(error)) {
         if (!active) return -EPIPE;
         return -error;
     }
     size_t bytes = bl.get_len();
-    if (!bytes) return 0;
+    if (unlikely(!bytes)) {
+        return 0;
+    }
     {
         std::lock_guard l{lock};
         pending_bl.Append(bl);
-        if (!connected) {
+        if (unlikely(!connected)) {
             std::cout << typeid(this).name() << " : " << __func__ << " fake send to upper, QP: " << local_qpn << std::endl;
             return bytes;
         }
     }
     // std::cout << typeid(this).name() << " : " << __func__ << " QP: " << local_qpn << std::endl;
     ssize_t r = submit(more);
-    if (r < 0 && r != -EAGAIN) return r;
+    if (unlikely(r < 0 && r != -EAGAIN)) {
+        return r;
+    }
     return bytes;
 }
 
@@ -405,11 +409,15 @@ size_t RDMAConnectedSocketImpl::tx_copy_chunk(std::vector<Chunk *> &tx_buffers, 
 }
 
 ssize_t RDMAConnectedSocketImpl::submit(bool more) {
-    if (error) return -error;
+    if (unlikely(error)) {
+        return -error;
+    }
     std::lock_guard l{lock};
     size_t bytes = pending_bl.get_len();
     // std::cout << typeid(this).name() << " : " << __func__ << " we need " << bytes << " bytes. iov size: " << pending_bl.GetSize() << std::endl;
-    if (!bytes) return 0;
+    if (unlikely(!bytes)) {
+        return 0;
+    }
 
     std::vector<Chunk *> tx_buffers;
     auto it = pending_bl.get_begin();
@@ -446,16 +454,15 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
     */
     // sending:
 
-    if (total_copied == 0) return -EAGAIN;
+    if (unlikely(total_copied == 0)) return -EAGAIN;
     // kassert(total_copied == pending_bl.get_len());
-    pending_bl.Clear();
 
     // std::cout << typeid(this).name() << " : " << __func__ << " left bytes: " << pending_bl.get_len() << " in buffers " << pending_bl.GetSize()
     //<< " tx chunks " << tx_buffers.size() << std::endl;
 
     int r = post_work_request(tx_buffers);
-    if (r < 0) return r;
-
+    pending_bl.Clear();
+    if (unlikely(r < 0)) return r;
     // std::cout << typeid(this).name() << " : " << __func__ << " finished sending " << total_copied << " bytes." << std::endl;
     return pending_bl.get_len() ? -EAGAIN : 0;
 }
@@ -471,8 +478,10 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
     uint32_t num = 0;
 
     // FIPS zeroization audit 20191115: these memsets are not security related.
+    /*
     memset(iswr, 0, sizeof(iswr));
     memset(isge, 0, sizeof(isge));
+    */
 
     while (current_buffer != tx_buffers.end()) {
         isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
@@ -496,7 +505,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
         ++current_swr;
         ++current_buffer;
     }
-
     ibv_send_wr *bad_tx_work_request = nullptr;
 
     if (unlikely(ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request))) {

@@ -164,6 +164,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     ssize_t write(char *buf, ssize_t) override {
         std::cout << __func__ << "does not have this implementation" << std::endl;
         assert(false);
+        return 0;
     }
 
     void set_txc_callback(std::function<void(Chunk *)> cb) override { txc_callback = cb; }

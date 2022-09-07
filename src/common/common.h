@@ -12,6 +12,7 @@
 #include "multicast/multicast.h"
 #endif
 
+#define NDEBUG
 #ifndef NDEBUG
 #define kassert(x)                                        \
     if (!(x)) {                                           \

@@ -512,7 +512,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         // TX completion may come either from
         //  1) regular send message, WCE wr_id points to chunk
         //  2) 'fin' message, wr_id points to the QP
-        if (ib->get_memory_manager()->is_valid_chunk(chunk)) {
+        if (likely(ib->get_memory_manager()->is_valid_chunk(chunk))) {
             tx_chunks.push_back(chunk);
         } else if (reinterpret_cast<QueuePair *>(response->wr_id)->get_local_qp_number() == response->qp_num) {
             std::cout << typeid(this).name() << " : " << __func__ << " sending of the disconnect msg completed" << std::endl;
@@ -535,7 +535,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
  *      0 if success or -1 for failure
  */
 void RDMADispatcher::post_tx_buffer(std::vector<Chunk *> &chunks) {
-    if (chunks.empty()) return;
+    if (unlikely(chunks.empty())) return;
 
     inflight -= chunks.size();
     ib->get_memory_manager()->return_tx(chunks);
@@ -559,7 +559,7 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
         switch (response->status) {
             case IBV_WC_SUCCESS:
                 kassert(response->opcode == IBV_WC_RECV);
-                if (!conn) {
+                if (unlikely(!conn)) {
                     std::cout << typeid(this).name() << " : " << __func__ << " csi with qpn " << response->qp_num << " may be dead. chunk 0x"
                               << std::hex << chunk << " will be back." << std::dec << std::endl;
                     ib->recall_chunk_to_pool(chunk);
@@ -568,7 +568,7 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
                     conn->post_chunks_to_rq(1);
                     polled[conn].push_back(*response);
 
-                    if (qp != nullptr && !qp->get_srq()) {
+                    if (likely(qp != nullptr && !qp->get_srq())) {
                         qp->remove_rq_wr(chunk);
                         chunk->clear_qp();
                     }

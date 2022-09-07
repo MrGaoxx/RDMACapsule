@@ -86,7 +86,6 @@ void RDMAPingPongClient::SendBatches(Connection*) {
             uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
             // std::cout << "sending data size" << sending_data_size << std::endl;
             std::vector<Infiniband::MemoryManager::Chunk*> buffers;
-            uint64_t inflight_threshold = (kNumRequest - 1) * static_cast<uint64_t>(kRequestSize);
             GetBuffers(buffers, sending_data_size);
             BufferList bl;
             std::size_t buffer_index = 0;
