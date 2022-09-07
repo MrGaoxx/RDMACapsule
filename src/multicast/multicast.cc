@@ -1,7 +1,7 @@
 #include "multicast/multicast.h"
 
-// c->m_rdma_config_->m_addr.in4_addr().sin_addr.s_addr) << 16
-MulticastDaemon::MulticastDaemon(Context *c) : Server(c), m_mc_id(rand() % 256) {
+//
+MulticastDaemon::MulticastDaemon(Context *c) : Server(c), m_mc_id((((c->m_rdma_config_->m_addr.in4_addr().sin_addr.s_addr) << 12) + rand()) % 20000) {
     // multicast_map[entity_addr_t("172.16.0.11", 30000)] = 1;
     // multicast_addrs[mc_id] = {entity_addr_t("172.16.0.15", 30000), entity_addr_t("172.16.0.16", 30000)};
     // mc_id++;

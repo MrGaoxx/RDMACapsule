@@ -501,6 +501,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
                     }
                 } break;
             }
+            abort();
         }
 
         RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);

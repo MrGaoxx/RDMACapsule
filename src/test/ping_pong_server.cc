@@ -74,18 +74,21 @@ int RDMAPingPongServer::Listen() {
 }
 void RDMAPingPongServer::Poll(Connection*) {
     while (true) {
+        server.drain();
+        /*
         int rs = server.Read(server_addr, recv_buffer[pos], kRequestSize);
-        if (likely(rs <= 0)) {
-            if (rs != -EAGAIN && rs != -104) {
-                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
-            }
-        } else {
+        if (likely(rs > 0)) {
             if (unlikely(rs != kRequestSize)) {
                 std::cout << "!!! read the recv buffer of size:[" << rs << "] expected:[" << kRequestSize << "]" << std::endl;
             }
             std::cout << "read the recv buffer \n";
             pos = (pos + 1) % kMaxNumRequest;
+        } else {
+            if (rs != -EAGAIN && rs != -104) {
+                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
+            }
         }
+        */
     }
 }
 void RDMAPingPongServer::OnConnectionWriteable(Connection*) { std::cout << __func__ << std::endl; }

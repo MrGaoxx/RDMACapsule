@@ -209,6 +209,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     virtual int is_connected() override { return connected; }
 
     virtual ssize_t read(char *buf, size_t len) override;
+    virtual void drain() override;
     virtual ssize_t send(BufferList &bl, bool more) override;
     virtual void shutdown() override;
     virtual void close() override;

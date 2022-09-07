@@ -30,6 +30,7 @@ class ConnectedSocketImpl {
     virtual ~ConnectedSocketImpl() {}
     virtual int is_connected() = 0;
     virtual ssize_t read(char *, size_t) = 0;
+    virtual void drain(){};
     virtual ssize_t send(BufferList &bl, bool more) = 0;
     virtual ssize_t write(char *buf, ssize_t size) = 0;
     virtual void shutdown() = 0;
@@ -91,9 +92,9 @@ class ConnectedSocket {
     ///
     /// Copy an object returning data sent from the remote endpoint.
     ssize_t read(char *buf, size_t len) { return _csi->read(buf, len); }
-    /// Gets the output stream.
-    ///
-    /// Gets an object that sends data to the remote endpoint.
+
+    void drain() { _csi->drain(); }
+
     ssize_t send(BufferList &bl, bool more) { return _csi->send(bl, more); }
     /// Disables output to the socket.
     ///

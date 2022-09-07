@@ -85,7 +85,7 @@ void RDMAPingPongClient::SendBatches(Connection*) {
         uint64_t inflight_size_value;
         while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
             uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
-            std::cout << "sending data size" << sending_data_size << std::endl;
+            // std::cout << "sending data size" << sending_data_size << std::endl;
             std::vector<Infiniband::MemoryManager::Chunk*> buffers;
             uint64_t inflight_threshold = (kNumRequest - 1) * static_cast<uint64_t>(kRequestSize);
             GetBuffers(buffers, sending_data_size);
@@ -104,15 +104,13 @@ void RDMAPingPongClient::SendBatches(Connection*) {
             uint64_t now = Cycles::get_soft_timestamp_us();
             // kassert(buffers.size() == kNumRequest);
             for (auto chunk : buffers) {
-                std::lock_guard<std::mutex>{data_lock};
                 clientTimeRecords.Add(TimeRecordTerm{chunk->log_id, TimeRecordType::APP_SEND_BEFORE, now});
             }
             inflight_size += sending_data_size;
             // std::cout << __func__ << " inflight size" << inflight_size.load() << std::endl;
-            server.Send(server_addr, bl);
+            server.send(server_addr, bl);
             now = Cycles::get_soft_timestamp_us();
             for (auto chunk : buffers) {
-                std::lock_guard<std::mutex>{data_lock};
                 clientTimeRecords.Add(TimeRecordTerm{chunk->log_id, TimeRecordType::APP_SEND_AFTER, now});
             }
         }
@@ -122,7 +120,7 @@ void RDMAPingPongClient::SendBatches(Connection*) {
 void RDMAPingPongClient::OnConnectionReadable(Connection*) { std::cout << __func__ << std::endl; }
 
 void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
-    std::lock_guard<std::mutex>{data_lock};
+    std::lock_guard<std::mutex> lock(data_lock);
     clientTimeRecords.Add(TimeRecordTerm{chunk->log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
     chunk->log_id++;
     // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;

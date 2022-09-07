@@ -1097,7 +1097,8 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
         }
         i++;
     }
-
+    kassert(i == rq_wr_num);
+    rx_work_request[i - 1].next = nullptr;
     ibv_recv_wr *badworkrequest = nullptr;
     if (support_srq) {
         ret = ibv_post_srq_recv(srq, rx_work_request, &badworkrequest);
@@ -1106,9 +1107,23 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
         ret = ibv_post_recv(qp->get_qp(), rx_work_request, &badworkrequest);
     }
 
+    if (unlikely(ret != 0)) {
+        std::cout << "ibv_post_recv error ret:" << ret << " errno " << errno << " " << strerror(errno) << std::endl;
+        while (badworkrequest != &rx_work_request[rq_wr_num - 1]) {
+            Infiniband::Chunk *chunk = reinterpret_cast<Infiniband::Chunk *>(badworkrequest->wr_id);
+            qp->remove_rq_wr(chunk);
+            chunk->clear_qp();
+            get_memory_manager()->release_rx_buffer(chunk);
+            badworkrequest = badworkrequest->next;
+            i--;
+            kassert(i >= 0);
+        }
+    }
+
     ::free(rx_work_request);
     ::free(isge);
-    kassert(badworkrequest == nullptr && ret == 0);
+
+    // kassert(badworkrequest == nullptr && ret == 0);
     return i;
 }
 

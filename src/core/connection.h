@@ -29,7 +29,7 @@ class Connection {
     ssize_t write(char *buf, size_t size) { return cs.write(buf, size); }
 
     ssize_t Read(char *buf, size_t n) { return cs.read(buf, n); }
-
+    void drain() { cs.drain(); }
     uint32_t mc_id;
     void set_mc_id(uint32_t mc_id_) { mc_id = mc_id_; }
     uint32_t get_mc_id() { return mc_id; }

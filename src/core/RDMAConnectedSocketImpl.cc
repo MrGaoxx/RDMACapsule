@@ -289,7 +289,7 @@ void RDMAConnectedSocketImpl::buffer_prefetch(void) {
         Chunk *chunk = reinterpret_cast<Chunk *>(response->wr_id);
         chunk->prepare_read(response->byte_len);
 
-        if (chunk->get_size() == 0) {
+        if (unlikely(chunk->get_size() == 0)) {
             chunk->reset_read_chunk();
             dispatcher->perf_logger->inc(l_msgr_rdma_rx_fin);
             if (connected) {
@@ -300,11 +300,23 @@ void RDMAConnectedSocketImpl::buffer_prefetch(void) {
             continue;
         } else {
             buffers.push_back(chunk);
-            std::cout << typeid(this).name() << " : " << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound()
-                      << std::endl;
+            // std::cout << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound()<< std::endl;
         }
     }
     worker->perf_logger->inc(l_msgr_rdma_rx_chunks, cqe.size());
+}
+
+void RDMAConnectedSocketImpl::drain() {
+    std::vector<ibv_wc> cqe;
+    get_wc(cqe);
+    if (cqe.empty()) return;
+    for (size_t i = 0; i < cqe.size(); ++i) {
+        ibv_wc *response = &cqe[i];
+        kassert(response->status == IBV_WC_SUCCESS);
+        Chunk *chunk = reinterpret_cast<Chunk *>(response->wr_id);
+        dispatcher->recall_chunk_to_pool(chunk);
+        update_post_backlog();
+    }
 }
 
 ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
@@ -317,11 +329,11 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
         // std::cout << typeid(this).name() << " : " << __func__ << " read chunk " << *pchunk << " bytes length" << tmp
         // << " offset: " << (*pchunk)->get_offset() << " ,bound: " << (*pchunk)->get_bound() << std::endl;
 
-        if ((*pchunk)->get_size() == 0) {
+        if (likely((*pchunk)->get_size() == 0)) {
             (*pchunk)->reset_read_chunk();
             dispatcher->recall_chunk_to_pool(*pchunk);
             update_post_backlog();
-            // std::cout << typeid(this).name() << " : " << __func__ << " read over one chunk " << std::endl;
+            // std::cout << __func__ << " read over one chunk \n";
             pchunk++;
         }
 
@@ -566,5 +578,7 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd) {
 void RDMAConnectedSocketImpl::post_chunks_to_rq(int num) { post_backlog += num - ib->post_chunks_to_rq(num, qp); }
 
 void RDMAConnectedSocketImpl::update_post_backlog() {
-    if (post_backlog) post_backlog -= post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp);
+    if (post_backlog) {
+        post_backlog -= (post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp));
+    }
 }

@@ -100,7 +100,7 @@ class LockedNumericLoggerTerm : public LockedLoggerTerm<T_SUM, T> {
    public:
     using LockedLoggerTerm<T_SUM, T>::LockedLoggerTerm;
     virtual void Add(T&& value) override {
-        std::lock_guard(LockedLoggerTerm<T_SUM, T>::m_lock);
+        std::lock_guard<std::mutex> lock(LockedLoggerTerm<T_SUM, T>::m_lock);
         LockedLoggerTerm<T_SUM, T>::m_sum += value;
         if (unlikely(should_flush())) {
             flush();
@@ -151,14 +151,14 @@ class LockedContainerLoggerTerm : public LockedLoggerTerm<T_SUM, T> {
 
    protected:
     virtual void Add(T&& value) {
-        std::lock_guard(LockedLoggerTerm<T_SUM, T>::m_lock);
+        std::lock_guard<std::mutex> lock(LockedLoggerTerm<T_SUM, T>::m_lock);
         LockedLoggerTerm<T_SUM, T>::m_sum.emplace_back(value);
         if (unlikely(should_flush())) {
             flush();
         }
     }
     virtual void Add(T& value) {
-        std::lock_guard(LockedLoggerTerm<T_SUM, T>::m_lock);
+        std::lock_guard<std::mutex> lock(LockedLoggerTerm<T_SUM, T>::m_lock);
         LockedLoggerTerm<T_SUM, T>::m_sum.push_back(value);
         if (unlikely(should_flush())) {
             flush();
@@ -228,7 +228,7 @@ LockedAverageLoggerTerm<T>::LockedAverageLoggerTerm(const std::string& name, uin
 
 template <class T>
 void LockedAverageLoggerTerm<T>::Add(T&& value) {
-    std::lock_guard(LockedLoggerTerm<T, T>::m_lock);
+    std::lock_guard<std::mutex> lock(LockedLoggerTerm<T, T>::m_lock);
     m_sum += value;
     ++m_index;
     if (unlikely(m_index == m_record_frequency)) {
@@ -362,6 +362,7 @@ struct TimeRecordTerm {
 struct TimeRecords {
     std::unordered_map<uint64_t, std::vector<uint64_t>> records;
     void push_back(TimeRecordTerm& term) {
+        std::lock_guard<std::mutex> lock(m_lock);
         if (unlikely(records.count(term.id_) == 0)) {
             records.insert(std::pair(term.id_, std::vector<uint64_t>(64, 0)));
             // std::cout << "after pushed back, size is : " << records.size() << std::endl;
@@ -372,9 +373,13 @@ struct TimeRecords {
     void emplace_back(TimeRecordTerm& term) { push_back(term); }
     void resize(std::size_t size) {}
     std::size_t size() { return records.size(); }
-    void clear() { records.clear(); }
+    void clear() {
+        std::lock_guard<std::mutex> lock(m_lock);
+        std::unordered_map<uint64_t, std::vector<uint64_t>>().swap(records);
+    }
     decltype(records.begin()) begin() { return records.begin(); }
     decltype(records.end()) end() { return records.end(); }
+    std::mutex m_lock;
 };
 
 inline std::ostream& operator<<(std::ostream& os, std::pair<uint64_t, std::vector<uint64_t>> record) {
