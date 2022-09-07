@@ -159,6 +159,9 @@ inline void Config::parse(std::string& key, std::string& val) {
     } else if (key == "MULTICAST_GROUP_PORT2") {
         m_mc_group.port_member_2 = static_cast<uint16_t>(std::stoi(val));
         std::cout << " MULTICAST_GROUP_PORT2 = " << m_mc_group.port_member_2 << std::endl;
+    } else if (key == "GID_INDEX") {
+        m_gid_index_ = static_cast<uint16_t>(std::stoi(val));
+        std::cout << " GID_INDEX = " << m_gid_index_ << std::endl;
     } else if (key == "REQUEST_SIZE") {
         m_request_size = static_cast<uint32_t>(std::stoi(val));
         std::cout << " REQUEST_SIZE = " << m_request_size << std::endl;
