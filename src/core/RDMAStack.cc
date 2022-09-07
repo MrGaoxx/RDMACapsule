@@ -237,7 +237,7 @@ void RDMADispatcher::handle_async_event() {
 void RDMADispatcher::recall_chunk_to_pool(Chunk *chunk) {
     std::lock_guard l{lock};
     ib->recall_chunk_to_pool(chunk);
-    perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
+    // perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
 }
 
 int RDMADispatcher::post_chunks_to_rq(int num, QueuePair *qp) {

@@ -220,6 +220,7 @@ class Infiniband {
             uint32_t get_bound();
             uint32_t read(char *buf, uint32_t len);
             uint32_t write(char *buf, uint32_t len);
+            uint32_t zero_fill(uint32_t len);
             bool full();
             void reset_read_chunk();
             void reset_write_chunk();
@@ -539,6 +540,10 @@ class Infiniband {
         bool dead;
         std::vector<Chunk *> recv_queue;
         std::mutex lock;
+
+       public:
+        ibv_recv_wr *temp_ibv_recv_wr;
+        ibv_sge *temp_ibv_sge;
     };
 
    public:

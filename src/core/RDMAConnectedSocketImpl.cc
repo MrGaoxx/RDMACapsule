@@ -309,7 +309,7 @@ void RDMAConnectedSocketImpl::buffer_prefetch(void) {
 void RDMAConnectedSocketImpl::drain() {
     std::vector<ibv_wc> cqe;
     get_wc(cqe);
-    if (cqe.empty()) return;
+    if (unlikely(cqe.empty())) return;
     for (size_t i = 0; i < cqe.size(); ++i) {
         ibv_wc *response = &cqe[i];
         kassert(response->status == IBV_WC_SUCCESS);
@@ -422,7 +422,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
     std::vector<Chunk *> tx_buffers;
     auto it = pending_bl.get_begin();
     auto copy_start = it;
-    size_t total_copied = 0, wait_copy_len = 0;
+    // size_t total_copied = 0, wait_copy_len = 0;
     while (it != pending_bl.get_end()) {
         kassert(ib->is_tx_buffer(static_cast<const char *>(it->get_buffer())));
         // if (ib->is_tx_buffer(static_cast<const char *>(it->get_buffer()))) {
@@ -437,7 +437,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
         }*/
         kassert(copy_start == it);
         tx_buffers.push_back(ib->get_tx_chunk_by_buffer(static_cast<const char *>(it->get_buffer())));
-        total_copied += it->get_len();
+        // total_copied += it->get_len();
         ++copy_start;
         /*}
          else {
@@ -446,7 +446,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
          */
         ++it;
     }
-    kassert(wait_copy_len == 0);
+    // kassert(wait_copy_len == 0);
     /*
     if (unlikely(wait_copy_len)) {
         total_copied += tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
@@ -454,8 +454,8 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
     */
     // sending:
 
-    if (unlikely(total_copied == 0)) return -EAGAIN;
-    // kassert(total_copied == pending_bl.get_len());
+    // if (unlikely(total_copied == 0)) return -EAGAIN;
+    //  kassert(total_copied == pending_bl.get_len());
 
     // std::cout << typeid(this).name() << " : " << __func__ << " left bytes: " << pending_bl.get_len() << " in buffers " << pending_bl.GetSize()
     //<< " tx chunks " << tx_buffers.size() << std::endl;
@@ -586,7 +586,7 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd) {
 void RDMAConnectedSocketImpl::post_chunks_to_rq(int num) { post_backlog += num - ib->post_chunks_to_rq(num, qp); }
 
 void RDMAConnectedSocketImpl::update_post_backlog() {
-    if (post_backlog) {
+    if (likely(post_backlog)) {
         post_backlog -= (post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp));
     }
 }

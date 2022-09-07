@@ -93,7 +93,8 @@ void RDMAPingPongClient::SendBatches(Connection*) {
                 int remainingSize = kRequestSize;
                 do {
                     kassert(buffer_index < buffers.size());
-                    remainingSize -= buffers[buffer_index]->write(data, remainingSize);
+                    // remainingSize -= buffers[buffer_index]->write(data, remainingSize);
+                    remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
                     Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
                     bl.Append(buf);
                     buffer_index++;

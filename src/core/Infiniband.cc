@@ -163,7 +163,9 @@ Infiniband::QueuePair::QueuePair(Context *c, Infiniband &infiniband, ibv_qp_type
       max_send_wr(tx_queue_len + 1),
       max_recv_wr(rx_queue_len),
       q_key(q_key),
-      dead(false) {
+      dead(false),
+      temp_ibv_recv_wr(reinterpret_cast<ibv_recv_wr *>(::calloc(rx_queue_len, sizeof(ibv_recv_wr)))),
+      temp_ibv_sge(reinterpret_cast<ibv_sge *>(::calloc(rx_queue_len, sizeof(ibv_recv_wr)))) {
     if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
         std::cout << typeid(this).name() << " : " << __func__ << " invalid queue pair type" << cpp_strerror(errno) << std::endl;
         abort();
@@ -657,6 +659,13 @@ uint32_t Infiniband::MemoryManager::Chunk::write(char *buf, uint32_t len) {
     return write_len;
 }
 
+uint32_t Infiniband::MemoryManager::Chunk::zero_fill(uint32_t len) {
+    uint32_t write_len = (bytes - offset) <= len ? (bytes - offset) : len;
+    // memcpy(buffer + offset, buf, write_len);
+    offset += write_len;
+    return write_len;
+};
+
 bool Infiniband::MemoryManager::Chunk::full() { return offset == bytes; }
 
 void Infiniband::MemoryManager::Chunk::reset_read_chunk() {
@@ -981,8 +990,8 @@ void Infiniband::init() {
 
     // Keep extra one WR for a beacon to indicate all WCEs were consumed
     tx_queue_len = device->get_device_attr()->max_qp_wr - 1;
-    if (tx_queue_len > context->m_rdma_config_->m_rdma_send_queeu_len_) {
-        tx_queue_len = context->m_rdma_config_->m_rdma_send_queeu_len_;
+    if (tx_queue_len > context->m_rdma_config_->m_rdma_send_queue_len_) {
+        tx_queue_len = context->m_rdma_config_->m_rdma_send_queue_len_;
         std::cout << typeid(this).name() << " : " << __func__ << " assigning: " << tx_queue_len << " send buffers" << std::endl;
     } else {
         std::cout << typeid(this).name() << " : " << __func__ << " using the max allowed send buffers: " << tx_queue_len << std::endl;
@@ -1060,10 +1069,10 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
     int ret = 0;
     Chunk *chunk = nullptr;
 
-    ibv_recv_wr *rx_work_request = static_cast<ibv_recv_wr *>(::calloc(rq_wr_num, sizeof(ibv_recv_wr)));
-    ibv_sge *isge = static_cast<ibv_sge *>(::calloc(rq_wr_num, sizeof(ibv_sge)));
-    kassert(rx_work_request);
-    kassert(isge);
+    // ibv_recv_wr *rx_work_request = static_cast<ibv_recv_wr *>(::calloc(rq_wr_num, sizeof(ibv_recv_wr)));
+    ibv_recv_wr *rx_work_request = qp->temp_ibv_recv_wr;
+    // ibv_sge *isge = static_cast<ibv_sge *>(::calloc(rq_wr_num, sizeof(ibv_sge)));
+    ibv_sge *isge = qp->temp_ibv_sge;
 
     int i = 0;
     while (i < rq_wr_num) {
@@ -1120,8 +1129,8 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
         }
     }
 
-    ::free(rx_work_request);
-    ::free(isge);
+    //::free(rx_work_request);
+    //::free(isge);
 
     // kassert(badworkrequest == nullptr && ret == 0);
     return i;

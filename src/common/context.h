@@ -45,9 +45,9 @@ struct Config {
     uint8_t m_rdma_port_num_ = 1;
 
     uint32_t m_rdma_buffer_size_bytes_ = 32 * 1024;
-    uint32_t m_rdma_send_queeu_len_ = 128;
+    uint32_t m_rdma_send_queue_len_ = 128;
     uint32_t m_rdma_receive_buffers_bytes_ = 64 * 1024;
-    uint32_t m_rdma_receive_queue_len_ = 128;
+    uint32_t m_rdma_receive_queue_len_ = 256;
     uint32_t m_rdma_polling_us_ = 128;
 
     uint8_t m_bind_retry_count_ = 1 << 3;
