@@ -38,7 +38,8 @@ struct multicast_cm_meta_t {
 
     union ibv_gid sender_gid;
     std::array<ibv_gid, kNumMulticasts> receiver_gid;
-} __attribute__((packed));
+};
+//__attribute__((packed));
 
 inline std::ostream &operator<<(std::ostream &os, const multicast_cm_meta_t &mc_meta) {
     os << "mc_meta.sender_lid " << mc_meta.sender_lid << "\n"

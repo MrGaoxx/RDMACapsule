@@ -550,7 +550,7 @@ class Infiniband {
     int post_chunks_to_rq(int num, QueuePair *qp = nullptr);
     void recall_chunk_to_pool(Chunk *chunk) {
         QueuePair *qp = chunk->get_qp();
-        if (qp != nullptr) {
+        if (likely(qp != nullptr)) {
             qp->remove_rq_wr(chunk);
         }
         get_memory_manager()->release_rx_buffer(chunk);
