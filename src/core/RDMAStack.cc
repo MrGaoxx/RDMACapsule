@@ -266,16 +266,16 @@ void RDMADispatcher::polling() {
     }
 
     while (true) {
+        int rx_ret = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
+        if (likely(rx_ret > 0)) {
+            // std::cout << typeid(this).name() << " : " << __func__ << " rx completion queue got " << rx_ret << " responses." << std::endl;
+            handle_rx_event(wc, rx_ret);
+        }
+
         int tx_ret = tx_cq->poll_cq(MAX_COMPLETIONS, wc);
         if (tx_ret > 0) {
             // std::cout << typeid(this).name() << " : " << __func__ << " tx completion queue got " << tx_ret << " responses." << std::endl;
             handle_tx_event(wc, tx_ret);
-        }
-
-        int rx_ret = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
-        if (rx_ret > 0) {
-            // std::cout << typeid(this).name() << " : " << __func__ << " rx completion queue got " << rx_ret << " responses." << std::endl;
-            handle_rx_event(wc, rx_ret);
         }
 
         if (unlikely(!tx_ret && !rx_ret)) {
@@ -604,7 +604,6 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
                                   << " RQ WR return error, remote Queue Pair, qp number: " << conn->get_peer_qpn() << std::endl;
                     }
                 }
-
                 ib->recall_chunk_to_pool(chunk);
                 perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
                 break;
