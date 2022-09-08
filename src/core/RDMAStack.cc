@@ -20,11 +20,11 @@
 #include <poll.h>
 #include <sys/resource.h>
 #include <sys/time.h>
+#include <unistd.h>
 
 #include "common/common_time.h"
 #include "common/perf_counters.h"
 #include "common/statistic.h"
-
 Logger clientLogger;
 static const uint32_t MAX_RECORD_TIME = 1e2;
 LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords("RequestTimeRecord", MAX_RECORD_TIME, &clientLogger);
@@ -255,6 +255,15 @@ void RDMADispatcher::polling() {
     uint64_t last_inactive = Cycles::get_soft_timestamp_us();
     bool rearmed = false;
     int r = 0;
+
+    cpu_set_t mask;     // cpu核的集合
+    CPU_ZERO(&mask);    // 将集合置为空集
+    CPU_SET(4, &mask);  // 设置亲和力值
+
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &mask) == -1)  // 设置线程cpu亲和力
+    {
+        std::cout << "warning: could not set CPU affinity, continuing...\n" << std::endl;
+    }
 
     while (true) {
         int tx_ret = tx_cq->poll_cq(MAX_COMPLETIONS, wc);
