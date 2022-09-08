@@ -364,7 +364,7 @@ struct TimeRecords {
     void push_back(TimeRecordTerm& term) {
         std::lock_guard<std::mutex> lock(m_lock);
         if (unlikely(records.count(term.id_) == 0)) {
-            records.insert(std::pair(term.id_, std::vector<uint64_t>(64, 0)));
+            records.insert(std::pair(term.id_, std::vector<uint64_t>(5, 0)));
             // std::cout << "after pushed back, size is : " << records.size() << std::endl;
         }
         records[term.id_][term.index_] = term.timestamp_;
@@ -392,15 +392,15 @@ inline std::ostream& operator<<(std::ostream& os, std::pair<uint64_t, std::vecto
 };
 
 inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
-    double whole_delay_sum = 0, delay1_sum = 0, delay2_sum = 0, delay3_sum = 0, delay4_sum = 0;
-    uint64_t whole_delay = 0, delay1 = 0, delay2 = 0, delay3 = 0, delay4 = 0;
+    double whole_delay_sum = 0, delay1_sum = 0, delay2_sum = 0, delay3_sum = 0, delay4_sum = 0, latency_sum = 0;
+    uint64_t whole_delay = 0, delay1 = 0, delay2 = 0, delay3 = 0, delay4, latency = 0;
     uint32_t nums = 0;
     for (auto& record : trs.records) {
         os << "id: " << record.first << " timestamps:";
         for (std::size_t i = 0; i < record.second.size(); i++) {
-            if (record.second[i] == 0) {
-                break;
-            }
+            // if (record.second[i] == 0) {
+            //     break;
+            // }
             os << " " << record.second[i];
         }
         whole_delay = record.second[4] - record.second[0];
@@ -408,12 +408,14 @@ inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
         delay2 = record.second[2] - record.second[1];
         delay3 = record.second[3] - record.second[2];
         delay4 = record.second[4] - record.second[3];
+        latency = record.second[3] - record.second[1];
         if (whole_delay > 0 && whole_delay < 1000) {
             whole_delay_sum += whole_delay;
             delay1_sum += delay1;
             delay2_sum += delay2;
             delay3_sum += delay3;
             delay4_sum += delay4;
+            latency_sum += latency;
             nums++;
         }
 
@@ -424,8 +426,10 @@ inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
     double average_delay2 = delay2_sum / nums;
     double average_delay3 = delay3_sum / nums;
     double average_delay4 = delay4_sum / nums;
+    double average_latency = latency_sum / nums;
 
-    os << "average whole delay: " << average_whole_delay << ", average delay 1: " << average_delay1 << ", average delay 2: " << average_delay2
+    os << "average compeletion latency: " << average_latency << ", average whole delay: " << average_whole_delay 
+        << ", average delay 1: " << average_delay1 << ", average delay 2: " << average_delay2
        << ", average delay 3: " << average_delay3 << ", average delay 4: " << average_delay4 << std::endl;
     os << std::endl;
     return os;

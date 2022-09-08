@@ -626,7 +626,7 @@ Infiniband::ProtectionDomain::ProtectionDomain(Context *context, Device *device)
 
 Infiniband::ProtectionDomain::~ProtectionDomain() { ibv_dealloc_pd(pd); }
 
-uint64_t Infiniband::MemoryManager::Chunk::log_id = 0;
+volatile std::atomic<uint64_t> Infiniband::MemoryManager::Chunk::log_id = 0;
 
 Infiniband::MemoryManager::Chunk::Chunk(ibv_mr *m, uint32_t bytes, char *buffer, uint32_t offset, uint32_t bound, uint32_t lkey, QueuePair *qp)
     : mr(m), qp(qp), lkey(lkey), bytes(bytes), offset(offset), bound(bound), buffer(buffer) {}
@@ -732,6 +732,10 @@ int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk *> &chunks
 
     for (r = 0; r < chunk_buffer_number; ++r) {
         chunks.push_back(free_chunks.back());
+        for (auto chunk : chunks) {
+            chunk->my_log_id = chunk->log_id;
+            chunk->log_id++;
+        }
         free_chunks.pop_back();
     }
     return r;

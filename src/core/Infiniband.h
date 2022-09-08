@@ -211,6 +211,7 @@ class Infiniband {
        public:
         class Chunk {
            public:
+            Chunk()=delete;
             Chunk(ibv_mr *m, uint32_t bytes, char *buffer, uint32_t offset = 0, uint32_t bound = 0, uint32_t lkey = 0, QueuePair *qp = nullptr);
             ~Chunk();
 
@@ -237,7 +238,8 @@ class Infiniband {
             uint32_t bound;
             char *buffer;  // TODO: remove buffer/refactor TX
             char data[0];
-            static uint64_t log_id;
+            volatile static std::atomic<uint64_t> log_id;
+            volatile uint64_t my_log_id;
         };
 
         class Cluster {

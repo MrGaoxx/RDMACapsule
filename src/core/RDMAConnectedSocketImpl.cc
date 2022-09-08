@@ -485,7 +485,7 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
 
     while (current_buffer != tx_buffers.end()) {
         isge[current_sge].addr = reinterpret_cast<uint64_t>((*current_buffer)->buffer);
-        clientTimeRecords.Add(TimeRecordTerm{(*current_buffer)->log_id, TimeRecordType::POST_SEND, Cycles::get_soft_timestamp_us()});
+        clientTimeRecords.Add(TimeRecordTerm{(*current_buffer)->my_log_id, TimeRecordType::POST_SEND, Cycles::get_soft_timestamp_us()});
         isge[current_sge].length = (*current_buffer)->get_offset();
         isge[current_sge].lkey = (*current_buffer)->mr->lkey;
         // std::cout << " sending buffer: " << *current_buffer << " length: " << isge[current_sge].length << std::endl;
