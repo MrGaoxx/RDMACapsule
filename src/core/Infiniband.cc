@@ -1081,8 +1081,8 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
             std::cout << typeid(this).name() << " : " << __func__ << " WARNING: out of memory. Request " << rq_wr_num << " rx buffers. Only get " << i
                       << " rx buffers." << std::endl;
             if (i == 0) {
-                ::free(rx_work_request);
-                ::free(isge);
+                //::free(rx_work_request);
+                //::free(isge);
                 return 0;
             }
             break;  // get some buffers, so we need post them to recevie queue
