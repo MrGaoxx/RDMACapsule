@@ -89,17 +89,14 @@ void RDMAPingPongClient::SendBatches(Connection*) {
             GetBuffers(buffers, sending_data_size);
             BufferList bl;
             std::size_t buffer_index = 0;
-            for (uint64_t sending_count = 0; sending_count < sending_data_size; sending_count += kRequestSize) {
-                int remainingSize = kRequestSize;
-                do {
-                    kassert(buffer_index < buffers.size());
-                    // remainingSize -= buffers[buffer_index]->write(data, remainingSize);
-                    remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
-                    Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
-                    bl.Append(buf);
-                    buffer_index++;
-                } while (remainingSize);
-            }
+            int remainingSize = sending_data_size;
+            do {
+                kassert(buffer_index < buffers.size());
+                remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
+                Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
+                bl.Append(buf);
+                buffer_index++;
+            } while (remainingSize);
             uint64_t now = Cycles::get_soft_timestamp_us();
             // kassert(buffers.size() == kNumRequest);
             for (auto chunk : buffers) {
