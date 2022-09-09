@@ -71,6 +71,8 @@ struct Config {
     uint32_t m_request_size;
     uint32_t m_request_num;
 
+    uint8_t m_cpu_id;
+
    private:
     void parse(std::string& key, std::string& val);
 };
@@ -168,6 +170,9 @@ inline void Config::parse(std::string& key, std::string& val) {
     } else if (key == "REQUEST_NUM") {
         m_request_num = static_cast<uint32_t>(std::stoi(val));
         std::cout << " REQUEST_NUM " << m_request_num << std::endl;
+    } else if (key == "CPU_ID") {
+        m_cpu_id = static_cast<uint8_t>(std::stoi(val));
+        std::cout << " CPU_ID " << m_cpu_id << std::endl;
     }
     return;
 }

@@ -256,9 +256,9 @@ void RDMADispatcher::polling() {
     bool rearmed = false;
     int r = 0;
 
-    cpu_set_t mask;     // cpu核的集合
-    CPU_ZERO(&mask);    // 将集合置为空集
-    CPU_SET(4, &mask);  // 设置亲和力值
+    cpu_set_t mask;                                     // cpu核的集合
+    CPU_ZERO(&mask);                                    // 将集合置为空集
+    CPU_SET(context->m_rdma_config_->m_cpu_id, &mask);  // 设置亲和力值
 
     if (sched_setaffinity(0, sizeof(cpu_set_t), &mask) == -1)  // 设置线程cpu亲和力
     {
