@@ -212,6 +212,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
     virtual ssize_t read(char *buf, size_t len) override;
     virtual void drain() override;
     virtual ssize_t send(BufferList &bl, bool more) override;
+    virtual int send(std::vector<Infiniband::MemoryManager::Chunk *>) override;
     virtual void shutdown() override;
     virtual void close() override;
     virtual int fd() const override { return notify_fd; }

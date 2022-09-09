@@ -18,6 +18,7 @@ class Server {
 
     virtual Connection *create_connect(const entity_addr_t &addr);
 
+    virtual int send(entity_addr_t dst, std::vector<Infiniband::MemoryManager::Chunk *> &chunks) { return conns[dst]->Send(chunks); }
     virtual int send(entity_addr_t dst, BufferList bl) { return conns[dst]->Send(bl); }
     void set_txc_callback(entity_addr_t dst, std::function<void(Infiniband::MemoryManager::Chunk *)> cb) { conns[dst]->set_txc_callback(cb); }
     virtual void drain() {

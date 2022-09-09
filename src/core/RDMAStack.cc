@@ -441,6 +441,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
 
         // If it's beacon WR, enqueue the QP to be destroyed later
         if (unlikely(response->wr_id == BEACON_WRID)) {
+            std::cout << " this is an beacon wrid" << std::endl;
             enqueue_dead_qp(response->qp_num);
             continue;
         }
@@ -544,7 +545,10 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
  *      0 if success or -1 for failure
  */
 void RDMADispatcher::post_tx_buffer(std::vector<Chunk *> &chunks) {
-    if (unlikely(chunks.empty())) return;
+    if (unlikely(chunks.empty())) {
+        std::cout << " chunks are empty when post tx buffer" << std::endl;
+        return;
+    }
 
     inflight -= chunks.size();
     ib->get_memory_manager()->return_tx(chunks);

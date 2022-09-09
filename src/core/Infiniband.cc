@@ -727,6 +727,10 @@ int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk *> &chunks
     std::lock_guard<std::mutex> l{lock};
     // krayecho: this is a fluky calculation
     uint32_t chunk_buffer_number = (block_size + buffer_size - 1) / buffer_size;
+    if (unlikely(chunk_buffer_number > free_chunks.size())) {
+        std::cout << " tx buffer pool does not have enough buffers" << std::endl;
+        abort();
+    }
     chunk_buffer_number = free_chunks.size() < chunk_buffer_number ? free_chunks.size() : chunk_buffer_number;
     uint32_t r = 0;
 
