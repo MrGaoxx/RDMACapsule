@@ -19,10 +19,9 @@ class Connection {
 
     entity_addr_t get_peer_socket_addr() const { return peer_addr; }
 
-    ssize_t Send(BufferList bl) {
-        kassert(center->in_thread());
-        return cs.send(bl, false);
-    }
+    ssize_t Send(BufferList bl) { return cs.send(bl, false); }
+
+    ssize_t Send(std::vector<Infiniband::MemoryManager::Chunk *> chunks) { return cs.send(chunks); }
 
     void set_txc_callback(std::function<void(Infiniband::MemoryManager::Chunk *)> cb) { cs.set_callback(cb); }
 

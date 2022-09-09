@@ -348,6 +348,19 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
     return read_size;
 }
 
+int RDMAConnectedSocketImpl::send(std::vector<Infiniband::MemoryManager::Chunk *> chunks) {
+    {
+        std::lock_guard l{lock};
+        if (unlikely(!connected)) {
+            std::cout << typeid(this).name() << " : " << __func__ << " fake send to upper, QP: " << local_qpn << std::endl;
+            return -1;
+        }
+    }
+    std::lock_guard l{lock};
+    int r = post_work_request(chunks);
+    return 0;
+}
+
 ssize_t RDMAConnectedSocketImpl::send(BufferList &bl, bool more) {
     if (unlikely(error)) {
         if (!active) return -EPIPE;
@@ -421,29 +434,9 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more) {
 
     std::vector<Chunk *> tx_buffers;
     auto it = pending_bl.get_begin();
-    auto copy_start = it;
-    // size_t total_copied = 0, wait_copy_len = 0;
     while (it != pending_bl.get_end()) {
         kassert(ib->is_tx_buffer(static_cast<const char *>(it->get_buffer())));
-        // if (ib->is_tx_buffer(static_cast<const char *>(it->get_buffer()))) {
-        kassert(wait_copy_len == 0);
-        /*
-        if (unlikely(wait_copy_len)) {
-            std::cout << __func__ << " the buffer is not a registerred buffer, geting" << std::endl;
-            size_t copied = tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
-            total_copied += copied;
-            if (copied < wait_copy_len) goto sending;
-            wait_copy_len = 0;
-        }*/
-        kassert(copy_start == it);
         tx_buffers.push_back(ib->get_tx_chunk_by_buffer(static_cast<const char *>(it->get_buffer())));
-        // total_copied += it->get_len();
-        ++copy_start;
-        /*}
-         else {
-             wait_copy_len += it->get_len();
-         }
-         */
         ++it;
     }
     // kassert(wait_copy_len == 0);

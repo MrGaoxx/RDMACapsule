@@ -211,7 +211,7 @@ class Infiniband {
        public:
         class Chunk {
            public:
-            Chunk()=delete;
+            Chunk() = delete;
             Chunk(ibv_mr *m, uint32_t bytes, char *buffer, uint32_t offset = 0, uint32_t bound = 0, uint32_t lkey = 0, QueuePair *qp = nullptr);
             ~Chunk();
 
@@ -234,7 +234,7 @@ class Infiniband {
             QueuePair *qp;
             uint32_t lkey;
             uint32_t bytes;
-            uint32_t offset;
+            volatile uint32_t offset;
             uint32_t bound;
             char *buffer;  // TODO: remove buffer/refactor TX
             char data[0];

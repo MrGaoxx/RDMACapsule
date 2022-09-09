@@ -84,31 +84,34 @@ void RDMAPingPongClient::SendBatches(Connection*) {
         uint64_t inflight_size_value;
         while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
             uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
+            inflight_size += sending_data_size;
             // std::cout << "sending data size" << sending_data_size << std::endl;
             std::vector<Infiniband::MemoryManager::Chunk*> buffers;
             GetBuffers(buffers, sending_data_size);
-            BufferList bl;
+            // BufferList bl;
             std::size_t buffer_index = 0;
             int remainingSize = sending_data_size;
+
             do {
                 kassert(buffer_index < buffers.size());
                 remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
-                Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
-                bl.Append(buf);
+                // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
+                //  bl.Append(buf);
                 buffer_index++;
             } while (remainingSize);
+            /*
             uint64_t now = Cycles::get_soft_timestamp_us();
             // kassert(buffers.size() == kNumRequest);
             for (auto chunk : buffers) {
                 clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::APP_SEND_BEFORE, now});
-            }
-            inflight_size += sending_data_size;
-            // std::cout << __func__ << " inflight size" << inflight_size.load() << std::endl;
-            server.send(server_addr, bl);
+            }*/
+            server.send(server_addr, buffers);
+            /*
             now = Cycles::get_soft_timestamp_us();
             for (auto chunk : buffers) {
                 clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::APP_SEND_AFTER, now});
             }
+            */
         }
     }
 }
@@ -117,10 +120,11 @@ void RDMAPingPongClient::OnConnectionReadable(Connection*) { std::cout << __func
 
 void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex> lock(data_lock);
-    clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
-    // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;
     kassert(inflight_size.load() >= chunk->get_offset());
     inflight_size -= chunk->get_offset();
+    // clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
+    // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;
+
     // std::cout << __func__ << " inflight size" << inflight_size.load() << std::endl;
 
     // SendOnce();

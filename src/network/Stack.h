@@ -32,6 +32,7 @@ class ConnectedSocketImpl {
     virtual ssize_t read(char *, size_t) = 0;
     virtual void drain(){};
     virtual ssize_t send(BufferList &bl, bool more) = 0;
+    virtual int send(std::vector<Infiniband::MemoryManager::Chunk *>) { return -1; }
     virtual ssize_t write(char *buf, ssize_t size) = 0;
     virtual void shutdown() = 0;
     virtual void close() = 0;
@@ -96,6 +97,7 @@ class ConnectedSocket {
     void drain() { _csi->drain(); }
 
     ssize_t send(BufferList &bl, bool more) { return _csi->send(bl, more); }
+    int send(std::vector<Infiniband::MemoryManager::Chunk *> chunks) { return _csi->send(chunks); }
     /// Disables output to the socket.
     ///
     ssize_t write(char *buf, size_t size) { return _csi->write(buf, size); }
