@@ -26,7 +26,7 @@
 #include "common/perf_counters.h"
 #include "common/statistic.h"
 Logger clientLogger;
-static const uint32_t MAX_RECORD_TIME = 1e2;
+static const uint32_t MAX_RECORD_TIME = 5e3;
 LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords("RequestTimeRecord", MAX_RECORD_TIME, &clientLogger);
 
 RDMADispatcher::~RDMADispatcher() {
@@ -515,8 +515,10 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         }
 
         RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
+        /*
         clientTimeRecords.Add(
             TimeRecordTerm{reinterpret_cast<Chunk *>(response->wr_id)->my_log_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
+        */
         conn->txc_callback(reinterpret_cast<Chunk *>(response->wr_id));
         auto chunk = reinterpret_cast<Chunk *>(response->wr_id);
         // TX completion may come either from
@@ -610,6 +612,7 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
                 }
                 ib->recall_chunk_to_pool(chunk);
                 perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
+                abort();
                 break;
 
             default:
@@ -623,6 +626,7 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
 
                 ib->recall_chunk_to_pool(chunk);
                 perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
+                abort();
                 break;
         }
     }

@@ -428,9 +428,9 @@ inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
     double average_delay4 = delay4_sum / nums;
     double average_latency = latency_sum / nums;
 
-    os << "average compeletion latency: " << average_latency << ", average whole delay: " << average_whole_delay 
-        << ", average delay 1: " << average_delay1 << ", average delay 2: " << average_delay2
-       << ", average delay 3: " << average_delay3 << ", average delay 4: " << average_delay4 << std::endl;
+    os << "average compeletion latency: " << average_latency << ", average whole delay: " << average_whole_delay
+       << ", average delay 1: " << average_delay1 << ", average delay 2: " << average_delay2 << ", average delay 3: " << average_delay3
+       << ", average delay 4: " << average_delay4 << std::endl;
     os << std::endl;
     return os;
 };

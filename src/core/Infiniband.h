@@ -240,6 +240,8 @@ class Infiniband {
             char data[0];
             volatile static std::atomic<uint64_t> log_id;
             volatile uint64_t my_log_id;
+            volatile uint8_t client_id;
+            volatile uint64_t request_id;
         };
 
         class Cluster {
@@ -249,6 +251,7 @@ class Infiniband {
 
             int fill(uint32_t num);
             void take_back(std::vector<Chunk *> &ck);
+            int get_chunks(std::vector<Chunk *> &chunks, size_t num);
             int get_buffers(std::vector<Chunk *> &chunks, size_t bytes);
             Chunk *get_chunk_by_buffer(const char *c) {
                 uint32_t idx = (c - base) / buffer_size;
@@ -342,7 +345,8 @@ class Infiniband {
 
         void create_tx_pool(uint32_t size, uint32_t tx_num);
         void return_tx(std::vector<Chunk *> &chunks);
-        int get_send_buffers(std::vector<Chunk *> &c, size_t bytes);
+        int get_send_buffers_by_size(std::vector<Chunk *> &c, size_t bytes);
+        int get_send_buffers_by_num(std::vector<Chunk *> &c, size_t num);
         bool is_tx_buffer(const char *c) { return send_buffers->is_my_buffer(c); }
         bool is_valid_chunk(const Chunk *c) { return send_buffers->is_valid_chunk(c); }
         Chunk *get_tx_chunk_by_buffer(const char *c) { return send_buffers->get_chunk_by_buffer(c); }
@@ -363,11 +367,12 @@ class Infiniband {
 
         Context *context;
 
+        Cluster *send_buffers = nullptr;  // SEND
        private:
         // TODO: Cluster -> TxPool txbuf_pool
         // chunk layout fix
         //
-        Cluster *send_buffers = nullptr;  // SEND
+
         Device *device;
         ProtectionDomain *pd;
         MemPoolContext rxbuf_pool_ctx;

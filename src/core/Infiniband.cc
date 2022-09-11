@@ -723,6 +723,25 @@ void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk *> &ck) {
     }
 }
 
+int Infiniband::MemoryManager::Cluster::get_chunks(std::vector<Chunk *> &chunks, size_t num) {
+    std::lock_guard<std::mutex> l{lock};
+    if (unlikely(num > free_chunks.size())) {
+        std::cout << " tx buffer pool does not have enough buffers" << std::endl;
+        abort();
+        return -1;
+    }
+    size_t r = 0;
+    for (r = 0; r < num; ++r) {
+        chunks.push_back(free_chunks.back());
+        for (auto chunk : chunks) {
+            chunk->my_log_id = chunk->log_id;
+            chunk->log_id++;
+        }
+        free_chunks.pop_back();
+    }
+    return r;
+}
+
 int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk *> &chunks, size_t block_size) {
     std::lock_guard<std::mutex> l{lock};
     // krayecho: this is a fluky calculation
@@ -913,7 +932,8 @@ void Infiniband::MemoryManager::create_tx_pool(uint32_t size, uint32_t tx_num) {
 
 void Infiniband::MemoryManager::return_tx(std::vector<Chunk *> &chunks) { send_buffers->take_back(chunks); }
 
-int Infiniband::MemoryManager::get_send_buffers(std::vector<Chunk *> &c, size_t bytes) { return send_buffers->get_buffers(c, bytes); }
+int Infiniband::MemoryManager::get_send_buffers_by_size(std::vector<Chunk *> &c, size_t bytes) { return send_buffers->get_buffers(c, bytes); }
+int Infiniband::MemoryManager::get_send_buffers_by_num(std::vector<Chunk *> &c, size_t num) { return send_buffers->get_chunks(c, num); }
 
 static std::atomic<bool> init_prereq = {false};
 
@@ -1051,7 +1071,7 @@ ibv_srq *Infiniband::create_shared_receive_queue(uint32_t max_wr, uint32_t max_s
     return ibv_create_srq(pd->pd, &sia);
 }
 
-int Infiniband::get_tx_buffers(std::vector<Chunk *> &c, size_t bytes) { return memory_manager->get_send_buffers(c, bytes); }
+int Infiniband::get_tx_buffers(std::vector<Chunk *> &c, size_t bytes) { return memory_manager->get_send_buffers_by_size(c, bytes); }
 
 /**
  * Create a new QueuePair. This factory should be used in preference to
