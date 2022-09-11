@@ -19,6 +19,8 @@ class SwitchTableWritter {
     //return mcg_id
     uint32_t multicast_group_add(uint32_t src_addr, uint32_t dqp_num, uint32_t sqp_num, uint32_t dst_addr1, uint32_t dqp1, uint32_t dst_addr2, uint32_t dqp2, uint32_t dst_addr3, uint32_t dqp3);
     uint32_t multicast_group_add(uint32_t src_addr, uint32_t dqp_num, uint32_t sqp_num, uint32_t dst_addr1, uint32_t dqp1, uint32_t dst_addr2, uint32_t dqp2);
+    uint32_t write_multicast_group_add(uint32_t src_addr, uint32_t dqp_num, uint32_t sqp_num, uint32_t dst_addr1, uint32_t dqp1, uint64_t offset1, uint32_t dst_addr2, uint32_t dqp2, uint64_t offset2);
+
     int multicast_group_del(uint32_t mcg_id, uint32_t src_addr, uint32_t dqp_num, uint32_t sqp_num, uint32_t dst_addr1, uint32_t dst_addr2, uint32_t dst_addr3);
     int multicast_group_del(uint32_t mcg_id, uint32_t src_addr, uint32_t dqp_num, uint32_t sqp_num, uint32_t dst_addr1, uint32_t dst_addr2);
     int allocate_multicast_group_id();

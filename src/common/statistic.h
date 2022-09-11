@@ -409,7 +409,7 @@ inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
         delay3 = record.second[3] - record.second[2];
         delay4 = record.second[4] - record.second[3];
         latency = record.second[3] - record.second[1];
-        if (whole_delay > 0 && whole_delay < 1000) {
+        if (latency > 0 && latency < 1000) {
             whole_delay_sum += whole_delay;
             delay1_sum += delay1;
             delay2_sum += delay2;
