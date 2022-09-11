@@ -324,7 +324,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
     buffer_prefetch();
     auto pchunk = buffers.begin();
     while (pchunk != buffers.end()) {
-        tmp = (*pchunk)->read(buf + read_size, len - read_size);
+        tmp = (*pchunk)->zero_read(buf + read_size, len - read_size);
         read_size += tmp;
         // std::cout << typeid(this).name() << " : " << __func__ << " read chunk " << *pchunk << " bytes length" << tmp
         // << " offset: " << (*pchunk)->get_offset() << " ,bound: " << (*pchunk)->get_bound() << std::endl;
