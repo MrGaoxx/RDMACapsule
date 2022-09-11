@@ -240,7 +240,7 @@ class Infiniband {
             char data[0];
             volatile static std::atomic<uint64_t> log_id;
             volatile uint64_t my_log_id;
-            volatile uint8_t client_id;
+            // volatile uint8_t replica_id;
             volatile uint64_t request_id;
         };
 

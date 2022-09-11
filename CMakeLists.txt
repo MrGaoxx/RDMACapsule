@@ -45,5 +45,8 @@ target_link_libraries(ping_pong_client RDMACapsule -lpthread -lrdmacm -libverbs 
 add_executable(ping_pong_server ./src/test/ping_pong_server.cc)
 target_link_libraries(ping_pong_server RDMACapsule -lpthread -lrdmacm -libverbs -lpthread -lboost_system)
 
+add_executable(unicast_client ./src/test/unicast_client.cc)
+target_link_libraries(unicast_client RDMACapsule -lpthread -lrdmacm -libverbs -lpthread -lboost_system)
+
 add_executable(multicast_daemon ./src/test/multicast_daemon.cc)
 target_link_libraries(multicast_daemon RDMACapsule -lpthread -lrdmacm -libverbs -lpthread -lboost_system -lpython2.7)

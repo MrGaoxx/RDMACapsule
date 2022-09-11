@@ -22,7 +22,6 @@ class RDMAPingPongClient {
     Connection* Connect(const char* serverAddr);
     void SendSmallRequests(Connection*);
     void SendBigRequests(Connection*);
-    void SendOnce();
     void OnConnectionReadable(Connection*);
     void OnSendCompletion(Infiniband::MemoryManager::Chunk*);
 
@@ -136,26 +135,28 @@ void RDMAPingPongClient::SendBigRequests(Connection*) {
         while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
             uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
             inflight_size += sending_data_size;
-            // std::cout << "sending data size" << sending_data_size << std::endl;
-            std::vector<Infiniband::MemoryManager::Chunk*> buffers;
-            GetBuffersBySize(buffers, sending_data_size);
-            // BufferList bl;
-            std::size_t buffer_index = 0;
-            int remainingSize = sending_data_size;
-            do {
-                kassert(buffer_index < buffers.size());
-                remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
-                buffers[buffer_index]->request_id = 0;
-                // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
-                //  bl.Append(buf);
-                buffer_index++;
+            for (int request_index = 0; request_index < sending_data_size / kRequestSize; request_index++) {
+                // std::cout << "sending data size" << sending_data_size << std::endl;
+                std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+                GetBuffersBySize(buffers, kRequestSize);
+                // BufferList bl;
+                std::size_t buffer_index = 0;
+                int remainingSize = kRequestSize;
+                do {
+                    kassert(buffer_index < buffers.size());
+                    remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
+                    buffers[buffer_index]->request_id = 0;
+                    // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
+                    //  bl.Append(buf);
+                    buffer_index++;
 
-            } while (remainingSize);
-            kassert(buffer_index == buffers.size());
-            buffers.back()->request_id = m_request_id++;
-            uint64_t now = Cycles::get_soft_timestamp_us();
-            m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
-            server.send(server_addr, buffers);
+                } while (remainingSize);
+                kassert(buffer_index == buffers.size());
+                buffers.back()->request_id = m_request_id++;
+                uint64_t now = Cycles::get_soft_timestamp_us();
+                m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
+                server.send(server_addr, buffers);
+            }
         }
     }
 }
@@ -175,7 +176,6 @@ void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chun
 
     // std::cout << __func__ << " inflight size" << inflight_size.load() << std::endl;
 
-    // SendOnce();
     //  clientTimeRecords.Flush();
     //   uint64_t lat = chunk_timeinfos[chunk].send_completion_time - chunk_timeinfos[chunk].post_send_time;
     //    average_latency.Add(lat);

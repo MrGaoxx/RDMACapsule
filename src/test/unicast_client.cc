@@ -16,21 +16,23 @@
 extern Logger clientLogger;
 extern LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords;
 
-class RDMAUnicastMulticastClient {
+class RDMAUnicastClient {
    public:
-    RDMAUnicastMulticastClient(std::string& configFileName);
+    RDMAUnicastClient(std::string& configFileName, uint8_t num_replicas);
     void Init();
-    Connection* Connect(const char* serverAddr);
-    void SendBatches(Connection*);
-    void SendOnce();
+    Connection* Connect(const char* serverAddr, uint8_t index);
+    void SendSmallRequests(Connection*);
+    void SendBigRequests(Connection*);
     void OnConnectionReadable(Connection*);
     void OnSendCompletion(Infiniband::MemoryManager::Chunk*);
+    void SetNumReplicas(uint8_t);
 
    private:
-    uint32_t kRequestSize = 32768;
-    uint32_t kNumRequest = 8;
-
-    int GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size);
+    uint64_t kRequestSize = 32768;
+    uint64_t kNumRequest = 8;
+    static const uint8_t kMaxRequestNum = 128;
+    int GetBuffersBySize(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size);
+    int GetBuffersByNum(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t num);
 
     std::function<void(Connection*)> send_call;
     std::function<void(Connection*)> readable_callback;
@@ -40,116 +42,213 @@ class RDMAUnicastMulticastClient {
     //    Server server_repli1;
     //    Server server_repli2;
     static const uint32_t kUnicastMaxRecordTime = 8192;
-    static const uint8_t kNumReplicas = 2;
-    Connection* conn[kNumReplicas];
-    entity_addr_t server_addr[kNumReplicas];
+    static const uint8_t kMaxNumReplicas = 4;
+    uint8_t kNumReplicas;
+    Connection* conn[kMaxNumReplicas];
+    entity_addr_t server_addr[kMaxNumReplicas];
     entity_addr_t client_addr;
     std::mutex data_lock;
     char* data;
     // std::mutex lock_inflight;
-    volatile uint64_t m_request_id[kNumReplicas];
-    std::atomic<uint64_t> inflight_size[kNumReplicas];
+    volatile uint64_t request_id[kMaxNumReplicas];
+    std::atomic<uint64_t> inflight_size;
 
-    Logger m_unicast_logger;
-    LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> m_client_unicast_records;
+    struct RequestACKCounter {
+        RequestACKCounter() = delete;
+        RequestACKCounter(uint8_t num_replicas) : m_num_replicas(num_replicas) {
+            for (int index = 0; index < kMaxRequestNum; index++) {
+                request_acked_num[index] = 0;
+            }
+        };
+        bool Increase(uint64_t request_id) {
+            std::lock_guard<std::mutex>{lock};
+            bool r;
+            request_acked_num[request_id % kMaxRequestNum]++;
+            if (request_acked_num[request_id % kMaxRequestNum] == m_num_replicas) {
+                request_acked_num[request_id % kMaxRequestNum] = 0;
+                r = true;
+            } else {
+                r = false;
+            }
+            return r;
+        }
+        std::mutex lock;
+        volatile uint8_t request_acked_num[kMaxRequestNum];
+        uint8_t m_num_replicas;
+    } request_ack_counter;
 
-    uint8_t m_num_ready = 0;
-    std::mutex m_num_lock;
+    Logger unicast_logger;
+    LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> client_unicast_records;
+
+    uint8_t num_ready = 0;
 };
 
-RDMAUnicastMulticastClient::RDMAUnicastMulticastClient(std::string& configFileName)
+RDMAUnicastClient::RDMAUnicastClient(std::string& configFileName, uint8_t num_replicas)
     : rdma_config(new Config(configFileName)),
       context(new Context(rdma_config)),
       server(context),
-      server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
+      kNumReplicas(num_replicas),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0),
-      m_client_unicast_records("RequestTimeRecord", kUnicastMaxRecordTime, &m_unicast_logger) {
-    send_call = std::bind(&RDMAUnicastMulticastClient::SendBatches, this, std::placeholders::_1);
-    readable_callback = std::bind(&RDMAUnicastMulticastClient::OnConnectionReadable, this, std::placeholders::_1);
+      request_ack_counter(num_replicas),
+      client_unicast_records("RequestTimeRecord", kUnicastMaxRecordTime, &unicast_logger) {
+    kRequestSize = context->m_rdma_config_->m_request_size;
+    kNumRequest = context->m_rdma_config_->m_request_num;
+
+    readable_callback = std::bind(&RDMAUnicastClient::OnConnectionReadable, this, std::placeholders::_1);
     server.conn_write_callback_p = &send_call;
     server.conn_read_callback_p = &readable_callback;
     clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "client.log");
-    m_unicast_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "unicast_client.log");
+    unicast_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "unicast_client.log");
+
     data = new char[kRequestSize];
-    kRequestSize = context->m_rdma_config_->m_request_size;
-    kNumRequest = context->m_rdma_config_->m_request_num;
-    for (int i = 0; i < kNumReplicas; i++) {
-        inflight_size[i].store(0);
-        m_request_id[i] = 0;
+
+    for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
+        server_addr[replica_index] = {entity_addr_t::type_t::TYPE_SERVER, 0};
+        inflight_size.store(0);
+        request_id[replica_index] = 0;
+    }
+    if (kRequestSize >= rdma_config->m_rdma_buffer_size_bytes_) {
+        send_call = std::bind(&RDMAUnicastClient::SendBigRequests, this, std::placeholders::_1);
+    } else {
+        send_call = std::bind(&RDMAUnicastClient::SendSmallRequests, this, std::placeholders::_1);
     }
 }
 
-void RDMAUnicastMulticastClient::Init() { server.start(); }
-Connection* RDMAUnicastMulticastClient::Connect(const char* serverAddr) {
+void RDMAUnicastClient::Init() { server.start(); }
+Connection* RDMAUnicastClient::Connect(const char* serverAddr, uint8_t index) {
+    kassert(index < kNumReplicas);
     client_addr.set_addr(rdma_config->m_ip_addr.c_str(), rdma_config->m_listen_port);
-    server_addr.set_addr(serverAddr, rdma_config->m_listen_port);
-    std::cout << typeid(this).name() << " : " << __func__ << server_addr << std::endl;
-    conn = server.create_connect(server_addr);
-    return conn;
+    server_addr[index].set_addr(serverAddr, rdma_config->m_listen_port);
+    std::cout << typeid(this).name() << " : " << __func__ << server_addr[index] << std::endl;
+    conn[index] = server.create_connect(server_addr[index]);
+    return conn[index];
 }
 
-int RDMAUnicastMulticastClient::GetBuffers(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size) {
+int RDMAUnicastClient::GetBuffersByNum(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t num) {
     Infiniband::MemoryManager* memoryManager = server.get_rdma_stack()->get_infiniband_entity()->get_memory_manager();
-    memoryManager->get_send_buffers(buffers, size);
+    memoryManager->get_send_buffers_by_num(buffers, num);
+    return 0;
+}
+int RDMAUnicastClient::GetBuffersBySize(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size) {
+    Infiniband::MemoryManager* memoryManager = server.get_rdma_stack()->get_infiniband_entity()->get_memory_manager();
+    memoryManager->get_send_buffers_by_size(buffers, size);
     return 0;
 }
 
-void RDMAUnicastMulticastClient::SendBatches(Connection*) {
-    uint32_t iters = 0;
-    server.set_txc_callback(server_addr, std::bind(&RDMAUnicastMulticastClient::OnSendCompletion, this, std::placeholders::_1));
+void RDMAUnicastClient::SendSmallRequests(Connection*) { /* this function will be called for kMaxNumReplicas times in (maybe) RDMA polling
+                                                          * processing threads only one thread is used for RDMA polling processing now
+                                                          */
+    std::lock_guard<std::mutex>{data_lock};
+    for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
+        server.set_txc_callback(server_addr[replica_index], std::bind(&RDMAUnicastClient::OnSendCompletion, this, std::placeholders::_1));
+    }
     {
-        std::lock_guard<std::mutex>{m_num_lock};
-        m_num_ready++;
-        if (m_num_ready < kNumReplicas) return;
+        num_ready++;
+        if (num_ready < kNumReplicas) return;  // connections not ready
     }
     uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
     while (true) {
-        for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
-            uint64_t inflight_size_value;
-            while ((inflight_size_value = inflight_size[replica_index].load()) <= inflight_threshold) {
-                uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
-                inflight_size[replica_index] += sending_data_size;
-                // std::cout << "sending data size" << sending_data_size << std::endl;
+        uint64_t inflight_size_value;
+        while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
+#ifndef NDEBUG
+            {
+                auto consistency = request_id[0];
+                for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
+                    if (unlikely(consistency != request_id[replica_index])) {
+                        std::cout << "request id of replicas are inconsistent!" << std::endl;
+                        abort();
+                    }
+                }
+            }
+#endif
+
+            uint64_t sending_data_num = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize;
+            uint64_t sending_data_size = sending_data_num * kRequestSize;
+            inflight_size += sending_data_size;
+            client_unicast_records.Add(
+                TimeRecordTerm{request_id[0] /*all the request id are the same*/, TimeRecordType::POST_SEND, Cycles::get_soft_timestamp_us()});
+            for (uint8_t replica_index = 0; replica_index < kNumReplicas; replica_index++) {
                 std::vector<Infiniband::MemoryManager::Chunk*> buffers;
-                GetBuffers(buffers, sending_data_size);
-                // BufferList bl;
+                GetBuffersByNum(buffers, sending_data_num);
                 std::size_t buffer_index = 0;
-                int remainingSize = sending_data_size;
-                do {
-                    kassert(buffer_index < buffers.size());
-                    remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
-                    // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
-                    //  bl.Append(buf);
-                    buffer_index++;
-                } while (remainingSize);
-                for (auto chunk : buffers) {
-                    chunk->client_id = replica_index;
-                    chunk->request_id = m_request_id[replica_index]++;
-                }
-                /*
                 uint64_t now = Cycles::get_soft_timestamp_us();
-                // kassert(buffers.size() == kNumRequest);
-                for (auto chunk : buffers) {
-                    clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::APP_SEND_BEFORE, now});
-                }*/
-                server.send(server_addr[replica_index], buffers);
-                /*
-                now = Cycles::get_soft_timestamp_us();
-                for (auto chunk : buffers) {
-                    clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::APP_SEND_AFTER, now});
+                for (auto& chunk : buffers) {
+                    chunk->zero_fill(kRequestSize);
+                    // chunk->replica_id = replica_index;
+                    chunk->request_id = request_id[replica_index]++;
                 }
-                */
+                server.send(server_addr[replica_index], buffers);
             }
         }
     }
 }
 
-void RDMAUnicastMulticastClient::OnConnectionReadable(Connection*) { std::cout << __func__ << std::endl; }
+void RDMAUnicastClient::SendBigRequests(Connection*) {
+    std::lock_guard<std::mutex>{data_lock};
+    for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
+        server.set_txc_callback(server_addr[replica_index], std::bind(&RDMAUnicastClient::OnSendCompletion, this, std::placeholders::_1));
+    }
+    {
+        num_ready++;
+        if (num_ready < kNumReplicas) return;  // connections not ready
+    }
+    uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
+    while (true) {
+        uint64_t inflight_size_value;
+        while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
+            uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
+            inflight_size += sending_data_size;
+            for (int request_index = 0; request_index < sending_data_size / kRequestSize; request_index++) {
+                client_unicast_records.Add(
+                    TimeRecordTerm{request_id[0] /*all the request id are the same*/, TimeRecordType::POST_SEND, Cycles::get_soft_timestamp_us()});
+#ifndef NDEBUG
+                {
+                    auto consistency = request_id[0];
+                    for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
+                        if (unlikely(consistency != request_id[replica_index])) {
+                            std::cout << "request id of replicas are inconsistent!" << std::endl;
+                            abort();
+                        }
+                    }
+                }
+#endif
+                for (uint8_t replica_index = 0; replica_index < kNumReplicas; replica_index++) {
+                    std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+                    GetBuffersBySize(buffers, kRequestSize);
+                    std::size_t buffer_index = 0;
+                    int remainingSize = kRequestSize;
+                    do {
+                        kassert(buffer_index < buffers.size());
+                        remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
+                        buffers[buffer_index]->request_id = 0;
+                        buffer_index++;
 
-void RDMAUnicastMulticastClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
+                    } while (remainingSize);
+                    kassert(buffer_index == buffers.size());
+                    // buffers.back()->replica_id = replica_index;
+                    buffers[buffers.size() - 1]->request_id = request_id[replica_index]++;
+                    server.send(server_addr[replica_index], buffers);
+                }
+            }
+        }
+    }
+}
+
+void RDMAUnicastClient::OnConnectionReadable(Connection*) { std::cout << __func__ << std::endl; }
+
+void RDMAUnicastClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex> lock(data_lock);
     kassert(inflight_size.load() >= chunk->get_offset());
-    inflight_size[chunk->client_id] -= chunk->get_offset();
+    if (chunk->request_id != 0) {
+        std::cout << "complete request_id" << request_id << std::endl;
+        auto request_id = chunk->request_id;
+        // auto replica_id = chunk->replica_id;
+        bool r = request_ack_counter.Increase(request_id);
+        if (r) {
+            client_unicast_records.Add(TimeRecordTerm{request_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
+            inflight_size -= kRequestSize;
+        }
+    }
     // clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
     // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;
 
@@ -164,10 +263,11 @@ void RDMAUnicastMulticastClient::OnSendCompletion(Infiniband::MemoryManager::Chu
 int main(int argc, char* argv[]) {
     Cycles::init();
     std::string configFileName(argv[1]);
-    RDMAUnicastMulticastClient rdmaClient(configFileName);
+    RDMAUnicastClient rdmaClient(configFileName, std::stoi(argv[2]));
     rdmaClient.Init();
-    rdmaClient.Connect(argv[2]);
-    rdmaClient.Connect(argv[3]);
+    for (uint8_t index = 0; index < std::stoi(argv[2]); index++) {
+        rdmaClient.Connect(argv[3 + index], index);
+    }
     sleep(10000);
     return 0;
 }
