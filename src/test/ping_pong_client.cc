@@ -59,7 +59,9 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0),
       m_client_loggger_records("RequestTimeRecord", kClientRequestMaxRecordTime, &m_client_logger) {
-    if (kRequestSize > rdma_config->m_rdma_buffer_size_bytes_) {
+    kRequestSize = context->m_rdma_config_->m_request_size;
+    kNumRequest = context->m_rdma_config_->m_request_num;
+    if (kRequestSize >= rdma_config->m_rdma_buffer_size_bytes_) {
         send_call = std::bind(&RDMAPingPongClient::SendBigRequests, this, std::placeholders::_1);
     } else {
         send_call = std::bind(&RDMAPingPongClient::SendSmallRequests, this, std::placeholders::_1);
@@ -70,8 +72,6 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
     clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
     m_client_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client_request.log");
     data = new char[kRequestSize];
-    kRequestSize = context->m_rdma_config_->m_request_size;
-    kNumRequest = context->m_rdma_config_->m_request_num;
 }
 
 void RDMAPingPongClient::Init() { server.start(); }
@@ -142,7 +142,6 @@ void RDMAPingPongClient::SendBigRequests(Connection*) {
             // BufferList bl;
             std::size_t buffer_index = 0;
             int remainingSize = sending_data_size;
-
             do {
                 kassert(buffer_index < buffers.size());
                 remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);

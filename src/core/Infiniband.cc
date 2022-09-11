@@ -344,7 +344,7 @@ int Infiniband::QueuePair::init() {
     local_cm_meta.lid = infiniband.get_lid();
     local_cm_meta.peer_qpn = 0;
     local_cm_meta.gid = infiniband.get_gid();
-    if (!srq) {
+    if (likely(!srq)) {
         int rq_wrs = infiniband.post_chunks_to_rq(max_recv_wr, this);
         if (rq_wrs == 0) {
             std::cout << typeid(this).name() << " : " << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num
@@ -1035,9 +1035,9 @@ void Infiniband::init() {
               << std::endl;
 
     memory_manager = new MemoryManager(context, device, pd);
-    memory_manager->create_tx_pool(context->m_rdma_config_->m_rdma_buffer_size_bytes_, tx_queue_len);
+    memory_manager->create_tx_pool(context->m_rdma_config_->m_rdma_buffer_size_bytes_, 2 * tx_queue_len);
 
-    if (support_srq) {
+    if (unlikely(support_srq)) {
         srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
         post_chunks_to_rq(rx_queue_len, NULL);  // add to srq
     }
@@ -1105,7 +1105,7 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
     int i = 0;
     while (i < rq_wr_num) {
         chunk = get_memory_manager()->get_rx_buffer();
-        if (chunk == nullptr) {
+        if (unlikely(chunk == nullptr)) {
             std::cout << typeid(this).name() << " : " << __func__ << " WARNING: out of memory. Request " << rq_wr_num << " rx buffers. Only get " << i
                       << " rx buffers." << std::endl;
             if (i == 0) {
@@ -1137,7 +1137,7 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp) {
     kassert(i == rq_wr_num);
     rx_work_request[i - 1].next = nullptr;
     ibv_recv_wr *badworkrequest = nullptr;
-    if (support_srq) {
+    if (unlikely(support_srq)) {
         ret = ibv_post_srq_recv(srq, rx_work_request, &badworkrequest);
     } else {
         kassert(qp);
