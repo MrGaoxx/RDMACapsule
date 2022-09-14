@@ -14,6 +14,8 @@
 #include "core/server.h"
 extern Logger clientLogger;
 extern LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords;
+// uint64_t now = Cycles::get_soft_timestamp_us();
+// uint64_t start_connect;
 
 class RDMAPingPongClient {
    public:
@@ -60,7 +62,7 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
       m_client_loggger_records("RequestTimeRecord", kClientRequestMaxRecordTime, &m_client_logger) {
     kRequestSize = context->m_rdma_config_->m_request_size;
     kNumRequest = context->m_rdma_config_->m_request_num;
-    if (kRequestSize >= rdma_config->m_rdma_buffer_size_bytes_) {
+    if (kRequestSize > rdma_config->m_rdma_buffer_size_bytes_) {
         send_call = std::bind(&RDMAPingPongClient::SendBigRequests, this, std::placeholders::_1);
     } else {
         send_call = std::bind(&RDMAPingPongClient::SendSmallRequests, this, std::placeholders::_1);
@@ -95,6 +97,18 @@ int RDMAPingPongClient::GetBuffersBySize(std::vector<Infiniband::MemoryManager::
 
 void RDMAPingPongClient::SendSmallRequests(Connection*) {
     uint32_t iters = 0;
+    uint64_t now = Cycles::get_soft_timestamp_us();
+    std::cout << "connecting time is "<< now-start_connect<<std::endl;
+
+    cpu_set_t mask;                                     // cpu核的集合
+    CPU_ZERO(&mask);                                    // 将集合置为空集
+    CPU_SET(context->m_rdma_config_->m_cpu_id+2, &mask);  // 设置亲和力值
+
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &mask) == -1)  // 设置线程cpu亲和力
+    {
+        std::cout << "warning: could not set CPU affinity, continuing...\n" << std::endl;
+    }
+
     server.set_txc_callback(server_addr, std::bind(&RDMAPingPongClient::OnSendCompletion, this, std::placeholders::_1));
     uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
     while (true) {
@@ -128,7 +142,19 @@ void RDMAPingPongClient::SendSmallRequests(Connection*) {
 
 void RDMAPingPongClient::SendBigRequests(Connection*) {
     uint32_t iters = 0;
+    uint64_t now = Cycles::get_soft_timestamp_us();
+    std::cout << "connecting time is "<< now-start_connect<<std::endl;
     server.set_txc_callback(server_addr, std::bind(&RDMAPingPongClient::OnSendCompletion, this, std::placeholders::_1));
+
+    cpu_set_t mask;                                     // cpu核的集合
+    CPU_ZERO(&mask);                                    // 将集合置为空集
+    CPU_SET(context->m_rdma_config_->m_cpu_id+2, &mask);  // 设置亲和力值
+
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &mask) == -1)  // 设置线程cpu亲和力
+    {
+        std::cout << "warning: could not set CPU affinity, continuing...\n" << std::endl;
+    }
+
     uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
     while (true) {
         uint64_t inflight_size_value;
@@ -187,6 +213,7 @@ int main(int argc, char* argv[]) {
     RDMAPingPongClient rdmaClient(configFileName);
     rdmaClient.Init();
     rdmaClient.Connect(argv[2]);
+    // start_connect = Cycles::get_soft_timestamp_us();
     sleep(10000);
     return 0;
 }

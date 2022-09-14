@@ -15,6 +15,7 @@
 
 extern Logger clientLogger;
 extern LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords;
+// uint64_t start_connect;
 
 class RDMAUnicastClient {
    public:
@@ -105,7 +106,7 @@ RDMAUnicastClient::RDMAUnicastClient(std::string& configFileName, uint8_t num_re
     for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
         server_addr[replica_index] = {entity_addr_t::type_t::TYPE_SERVER, 0};
         inflight_size.store(0);
-        request_id[replica_index] = 0;
+        request_id[replica_index] = 1;
     }
     if (kRequestSize >= rdma_config->m_rdma_buffer_size_bytes_) {
         send_call = std::bind(&RDMAUnicastClient::SendBigRequests, this, std::placeholders::_1);
@@ -138,6 +139,18 @@ int RDMAUnicastClient::GetBuffersBySize(std::vector<Infiniband::MemoryManager::C
 void RDMAUnicastClient::SendSmallRequests(Connection*) { /* this function will be called for kMaxNumReplicas times in (maybe) RDMA polling
                                                           * processing threads only one thread is used for RDMA polling processing now
                                                           */
+    uint64_t now = Cycles::get_soft_timestamp_us();
+    std::cout << "connecting time is "<< now-start_connect<<std::endl;
+
+    cpu_set_t mask;                                     // cpu核的集合
+    CPU_ZERO(&mask);                                    // 将集合置为空集
+    CPU_SET(context->m_rdma_config_->m_cpu_id+2, &mask);  // 设置亲和力值
+
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &mask) == -1)  // 设置线程cpu亲和力
+    {
+        std::cout << "warning: could not set CPU affinity, continuing...\n" << std::endl;
+    }
+
     std::lock_guard<std::mutex>{data_lock};
     for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
         server.set_txc_callback(server_addr[replica_index], std::bind(&RDMAUnicastClient::OnSendCompletion, this, std::placeholders::_1));
@@ -147,6 +160,7 @@ void RDMAUnicastClient::SendSmallRequests(Connection*) { /* this function will b
         if (num_ready < kNumReplicas) return;  // connections not ready
     }
     uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
+    inflight_threshold = inflight_threshold > 8388608 ? 8388608 : inflight_threshold;
     while (true) {
         uint64_t inflight_size_value;
         while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
@@ -184,6 +198,18 @@ void RDMAUnicastClient::SendSmallRequests(Connection*) { /* this function will b
 }
 
 void RDMAUnicastClient::SendBigRequests(Connection*) {
+    uint64_t now = Cycles::get_soft_timestamp_us();
+    std::cout << "connecting time is "<< now-start_connect<<std::endl;
+
+    cpu_set_t mask;                                     // cpu核的集合
+    CPU_ZERO(&mask);                                    // 将集合置为空集
+    CPU_SET(context->m_rdma_config_->m_cpu_id+2, &mask);  // 设置亲和力值
+
+    if (sched_setaffinity(0, sizeof(cpu_set_t), &mask) == -1)  // 设置线程cpu亲和力
+    {
+        std::cout << "warning: could not set CPU affinity, continuing...\n" << std::endl;
+    }
+    
     std::lock_guard<std::mutex>{data_lock};
     for (int replica_index = 0; replica_index < kNumReplicas; replica_index++) {
         server.set_txc_callback(server_addr[replica_index], std::bind(&RDMAUnicastClient::OnSendCompletion, this, std::placeholders::_1));
@@ -192,11 +218,16 @@ void RDMAUnicastClient::SendBigRequests(Connection*) {
         num_ready++;
         if (num_ready < kNumReplicas) return;  // connections not ready
     }
+    uint64_t max_qp_inflight_size = 128*65536;
     uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
+    inflight_threshold = inflight_threshold > max_qp_inflight_size ? max_qp_inflight_size : inflight_threshold;
+    uint64_t max_inflight_request_size = kNumRequest * static_cast<uint64_t>(kRequestSize);
+    max_inflight_request_size = max_inflight_request_size > max_qp_inflight_size ? max_qp_inflight_size : max_inflight_request_size;
+
     while (true) {
         uint64_t inflight_size_value;
         while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
-            uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
+            uint64_t sending_data_size = (max_inflight_request_size - inflight_size_value) / kRequestSize * kRequestSize;
             inflight_size += sending_data_size;
             for (int request_index = 0; request_index < sending_data_size / kRequestSize; request_index++) {
                 client_unicast_records.Add(
@@ -239,8 +270,9 @@ void RDMAUnicastClient::OnConnectionReadable(Connection*) { std::cout << __func_
 void RDMAUnicastClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex> lock(data_lock);
     kassert(inflight_size.load() >= chunk->get_offset());
+    // std::cout << "load finished" << request_id << std::endl;
     if (chunk->request_id != 0) {
-        std::cout << "complete request_id" << request_id << std::endl;
+        // std::cout << "complete request_id" << request_id << std::endl;
         auto request_id = chunk->request_id;
         // auto replica_id = chunk->replica_id;
         bool r = request_ack_counter.Increase(request_id);
@@ -268,6 +300,7 @@ int main(int argc, char* argv[]) {
     for (uint8_t index = 0; index < std::stoi(argv[2]); index++) {
         rdmaClient.Connect(argv[3 + index], index);
     }
+    start_connect = Cycles::get_soft_timestamp_us();
     sleep(10000);
     return 0;
 }

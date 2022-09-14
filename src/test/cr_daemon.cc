@@ -11,26 +11,31 @@
 #include "common/context.h"
 #include "core/Infiniband.h"
 #include "core/server.h"
+#include "common/statistic.h"
+
+#define ACK_SIZE 62
 
 class ChainReplicationClient {
    public:
     ChainReplicationClient(std::string& configFileName);
     void Init();
     Connection* Connect(const char* serverAddr);
-    void SendRequests(Connection*);
+    void SendRequests(uint32_t sending_reqesut_size);
     void OnConnectionReadable(Connection*);
     void OnSendCompletion(Infiniband::MemoryManager::Chunk*);
-    void ReadyToSend() { ready = true; }
+    void ReadyToSend(Connection*);
     bool IsReady() { return ready; }
+    std::function<void(Connection*)> send_call;
 
    private:
     uint32_t kRequestSize = 32768;
     uint32_t kNumRequest = 8;
+    uint16_t role = 0;
 
     int GetBuffersBySize(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t size);
     int GetBuffersByNum(std::vector<Infiniband::MemoryManager::Chunk*>& buffers, uint32_t num);
 
-    std::function<void(Connection*)> send_call;
+    
     std::function<void(Connection*)> readable_callback;
     Config* rdma_config;
     Context* context;
@@ -60,14 +65,15 @@ ChainReplicationClient::ChainReplicationClient(std::string& configFileName)
       ready(false) {
     kRequestSize = context->m_rdma_config_->m_request_size;
     kNumRequest = context->m_rdma_config_->m_request_num;
-    send_call = std::bind(&ChainReplicationClient::ReadToSend(), this, std::placeholders::_1);
+    role = context->m_rdma_config_->m_cr_role;
+    send_call = std::bind(&ChainReplicationClient::ReadyToSend, this, std::placeholders::_1);
     readable_callback = std::bind(&ChainReplicationClient::OnConnectionReadable, this, std::placeholders::_1);
     server.conn_write_callback_p = &send_call;
     server.conn_read_callback_p = &readable_callback;
-    clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
+    // clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
     m_client_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client_request.log");
     data = new char[kRequestSize];
-    server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletion, this, std::placeholders::_1));
+    // server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletion, this, std::placeholders::_1));
 }
 
 void ChainReplicationClient::Init() { server.start(); }
@@ -90,8 +96,16 @@ int ChainReplicationClient::GetBuffersBySize(std::vector<Infiniband::MemoryManag
     return 0;
 }
 
-void ChainReplicationClient::SendRequest(uint32_t sending_reqesut_size) {
+void ChainReplicationClient::ReadyToSend(Connection*) { 
+    ready = true; 
+    if (role == 0){
+        SendRequests(kRequestSize);
+    }
+}
+
+void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
     // std::cout << "sending data size" << sending_data_size << std::endl;
+    server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletion, this, std::placeholders::_1));
     std::vector<Infiniband::MemoryManager::Chunk*> buffers;
     GetBuffersBySize(buffers, sending_reqesut_size);
     int buffer_index = 0;
@@ -148,6 +162,7 @@ class ChainReplicationServer {
     uint8_t pos;
 
    private:
+    uint16_t role = 0;
     bool listening;
     Config* rdma_config;
     Context* context;
@@ -172,6 +187,7 @@ ChainReplicationServer::ChainReplicationServer(std::string& configFileName)
     conn_writeable_callback = std::bind(&ChainReplicationServer::OnConnectionWriteable, this, std::placeholders::_1);
     server.conn_read_callback_p = &poll_call;
     server.conn_write_callback_p = &conn_writeable_callback;
+    role = context->m_rdma_config_->m_cr_role;
 }
 ChainReplicationServer::~ChainReplicationServer() {
     delete rdma_config;
@@ -193,16 +209,27 @@ int ChainReplicationServer::Listen() {
     std::cout << "SERVER:: listening on the addr" << server_addr << std::endl;
     return server.bind(server_addr);
 }
+
+void ChainReplicationServer::SetTransmitClient(ChainReplicationClient* crClient) {
+    client = crClient;
+}
+
 void ChainReplicationServer::Poll(Connection*) {
     int read_len = 0;
     while (true) {
-        int rs + = server.Read(server_addr, recv_buffer[pos], kRequestSize);
+        int rs = server.read(server_addr, recv_buffer[pos], kRequestSize);
         if (likely(rs > 0)) {
             read_len += rs;
             if (likely(read_len == kRequestSize)) {
                 pos = (pos + 1) % kMaxNumRequest;
                 kassert(client->IsReady());
-                client->SendRequest(kRequestSize);
+                if (role == 1){
+                    client->SendRequests(kRequestSize);
+                }
+                else if (role == 2){
+                    client->SendRequests(ACK_SIZE);
+                }
+                
                 read_len = 0;
             }
         } else {
@@ -215,32 +242,6 @@ void ChainReplicationServer::Poll(Connection*) {
 }
 void ChainReplicationServer::OnConnectionWriteable(Connection*) { std::cout << __func__ << std::endl; }
 
-#include <arpa/inet.h>
-#include <ifaddrs.h>
-#include <netinet/in.h>
-#include <netinet/ip.h>
-#include <stdint.h>
-
-#include <atomic>
-#include <functional>
-
-#include "RDMAStack.h"
-#include "common/context.h"
-#include "common/statistic.h"
-#include "core/Infiniband.h"
-#include "core/server.h"
-extern Logger clientLogger;
-extern LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords;
-
-int main(int argc, char* argv[]) {
-    Cycles::init();
-    std::string configFileName(argv[1]);
-    ChainReplicationClient rdmaClient(configFileName);
-    rdmaClient.Init();
-    rdmaClient.Connect(argv[2]);
-    sleep(10000);
-    return 0;
-}
 
 int main(int argc, char* argv[]) {
     Cycles::init();
@@ -252,6 +253,7 @@ int main(int argc, char* argv[]) {
     ChainReplicationClient client(configFileName);
     server.Init();
     int error = server.Listen();
+    server.SetTransmitClient(&client);
 
     if (unlikely(error)) {
         std::cout << "worker cannot listen socket on addr" << cpp_strerror(error) << std::endl;
@@ -260,8 +262,9 @@ int main(int argc, char* argv[]) {
         std::cout << "==========> listening socket succeeded" << std::endl;
     };
 
-    rdmaClient.Init();
-    rdmaClient.Connect(argv[2]);
+    client.Init();
+    sleep(10);
+    client.Connect(argv[2]);
 
     sleep(100000);
     return 0;

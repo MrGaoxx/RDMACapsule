@@ -1043,7 +1043,7 @@ void Infiniband::init() {
               << std::endl;
 
     memory_manager = new MemoryManager(context, device, pd);
-    memory_manager->create_tx_pool(context->m_rdma_config_->m_rdma_buffer_size_bytes_, 2 * tx_queue_len);
+    memory_manager->create_tx_pool(context->m_rdma_config_->m_rdma_buffer_size_bytes_, 8 * tx_queue_len);
 
     if (unlikely(support_srq)) {
         srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);

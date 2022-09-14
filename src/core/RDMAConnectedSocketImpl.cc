@@ -18,6 +18,7 @@
 
 extern Logger clientLogger;
 extern LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> clientTimeRecords;
+uint64_t start_connect;
 
 class C_handle_connection_established : public EventCallback {
     RDMAConnectedSocketImpl *csi;
@@ -159,6 +160,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t &peer_addr, const S
 }
 
 int RDMAConnectedSocketImpl::handle_connection_established(bool need_set_fault) {
+    start_connect = Cycles::get_soft_timestamp_us();
     std::cout << typeid(this).name() << " : " << __func__ << " start " << std::endl;
     // delete read event
     worker->center.delete_file_event(tcp_fd, EVENT_READABLE | EVENT_WRITABLE);
