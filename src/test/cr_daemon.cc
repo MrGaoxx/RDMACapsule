@@ -99,6 +99,7 @@ int ChainReplicationClient::GetBuffersBySize(std::vector<Infiniband::MemoryManag
 void ChainReplicationClient::ReadyToSend(Connection*) { 
     ready = true; 
     if (role == 0){
+        sleep(5);
         SendRequests(kRequestSize);
     }
 }

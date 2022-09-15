@@ -218,7 +218,7 @@ void RDMAUnicastClient::SendBigRequests(Connection*) {
         num_ready++;
         if (num_ready < kNumReplicas) return;  // connections not ready
     }
-    uint64_t max_qp_inflight_size = 128*65536;
+    uint64_t max_qp_inflight_size = 128*65536/2;
     uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
     inflight_threshold = inflight_threshold > max_qp_inflight_size ? max_qp_inflight_size : inflight_threshold;
     uint64_t max_inflight_request_size = kNumRequest * static_cast<uint64_t>(kRequestSize);

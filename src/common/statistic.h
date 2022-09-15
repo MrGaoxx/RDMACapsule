@@ -14,6 +14,7 @@
 #include <string>
 
 #include "common/common_time.h"
+#define TX_LOG_INTERVAL 5e4
 extern uint64_t start_connect;
 
 class Logger {
