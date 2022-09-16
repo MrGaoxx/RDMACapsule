@@ -247,24 +247,24 @@ ssize_t RDMAConnectedSocketImpl::read(char *buf, size_t len) {
     int r = eventfd_read(notify_fd, &event_val);
     // std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
 
-    if (r == -1 && errno != EAGAIN) {
+    if (unlikely(r == -1 && errno != EAGAIN)) {
         std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
         std::cout << "READ fd FAILED: " << cpp_strerror(errno) << std::endl;
     }
 
-    if (!active) {
+    if (unlikely(!active)) {
         // std::cout << typeid(this).name() << " : " << __func__ << " when ib not active. len: " << len << std::endl;
         return -EAGAIN;
     }
 
-    if (0 == connected && !is_server) {
+    if (unlikely(0 == connected && !is_server)) {
         // std::cout << typeid(this).name() << " : " << __func__ << " when ib not connected. len: " << len << std::endl;
         return -EAGAIN;
     }
     ssize_t read = 0;
     read = read_buffers(buf, len);
 
-    if (is_server && connected == 0) {
+    if (unlikely(is_server && connected == 0)) {
         std::cout << typeid(this).name() << " : " << __func__ << " we do not need last handshake, QP: " << local_qpn << " peer QP: " << peer_qpn
                   << std::endl;
         connected = 1;  // if so, we don't need the last handshake
@@ -276,7 +276,7 @@ ssize_t RDMAConnectedSocketImpl::read(char *buf, size_t len) {
         notify();
     }
 
-    if (read == 0 && error) return -error;
+    if (unlikely(read == 0 && error)) return -error;
     return read == 0 ? -EAGAIN : read;
 }
 
@@ -305,7 +305,7 @@ void RDMAConnectedSocketImpl::buffer_prefetch(void) {
             // std::cout << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound()<< std::endl;
         }
     }
-    worker->perf_logger->inc(l_msgr_rdma_rx_chunks, cqe.size());
+    // worker->perf_logger->inc(l_msgr_rdma_rx_chunks, cqe.size());
 }
 
 void RDMAConnectedSocketImpl::drain() {
@@ -346,7 +346,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char *buf, size_t len) {
 
     buffers.erase(buffers.begin(), pchunk);
     // std::cout << typeid(this).name() << " : " << __func__ << " got " << read_size << " bytes, buffers size: " << buffers.size() << std::endl;
-    worker->perf_logger->inc(l_msgr_rdma_rx_bytes, read_size);
+    // worker->perf_logger->inc(l_msgr_rdma_rx_bytes, read_size);
     return read_size;
 }
 
@@ -501,9 +501,11 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk *> &tx_buffers)
     }
     ibv_send_wr *bad_tx_work_request = nullptr;
 
-    if (unlikely(ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request))) {
+    uint32_t ret;
+    if (unlikely(ret = ibv_post_send(qp->get_qp(), iswr, &bad_tx_work_request))) {
         std::cout << typeid(this).name() << " : " << __func__ << " failed to send data"
                   << " (most probably should be peer not ready): " << cpp_strerror(errno) << std::endl;
+        std::cout << "ret: "<<ret<< std::endl;
         worker->perf_logger->inc(l_msgr_rdma_tx_failed);
         return -errno;
     }

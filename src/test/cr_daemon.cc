@@ -13,7 +13,7 @@
 #include "core/server.h"
 #include "common/statistic.h"
 
-#define ACK_SIZE 62
+#define ACK_SIZE 64
 
 class ChainReplicationClient {
    public:
@@ -21,11 +21,16 @@ class ChainReplicationClient {
     void Init();
     Connection* Connect(const char* serverAddr);
     void SendRequests(uint32_t sending_reqesut_size);
+    void SetSendCompetionCall();
+    void SendSmallRequestsHead();
+    void SendBigRequestsHead();
     void OnConnectionReadable(Connection*);
     void OnSendCompletion(Infiniband::MemoryManager::Chunk*);
+    void OnSendCompletionHead(Infiniband::MemoryManager::Chunk*);
     void ReadyToSend(Connection*);
     bool IsReady() { return ready; }
     std::function<void(Connection*)> send_call;
+    void InflightRelease();
 
    private:
     uint32_t kRequestSize = 32768;
@@ -98,27 +103,53 @@ int ChainReplicationClient::GetBuffersBySize(std::vector<Infiniband::MemoryManag
 
 void ChainReplicationClient::ReadyToSend(Connection*) { 
     ready = true; 
+    server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletion, this, std::placeholders::_1));
+
     if (role == 0){
-        sleep(5);
-        SendRequests(kRequestSize);
+        if (kRequestSize > rdma_config->m_rdma_buffer_size_bytes_) {
+            SendBigRequestsHead();
+        } else {
+            SendSmallRequestsHead();
+        }
     }
 }
 
+void ChainReplicationClient::InflightRelease() {
+    kassert(inflight_size.load() >= kRequestSize);
+    inflight_size -= kRequestSize;
+    // std::cout << "release finished, val is " <<inflight_size.load() << std::endl;
+}
+
+void ChainReplicationClient::SetSendCompetionCall() {
+    if (role == 0) {
+        server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletion, this, std::placeholders::_1));
+    }
+    
+}
+
 void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
-    // std::cout << "sending data size" << sending_data_size << std::endl;
-    server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletion, this, std::placeholders::_1));
+    
+    
     std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+
     GetBuffersBySize(buffers, sending_reqesut_size);
     int buffer_index = 0;
-    do {
-        kassert(buffer_index < buffers.size());
-        sending_reqesut_size -= buffers[buffer_index]->zero_fill(sending_reqesut_size);
-        buffers[buffer_index]->request_id = 0;
-        // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
-        //  bl.Append(buf);
-        buffer_index++;
-
-    } while (sending_reqesut_size);
+    uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
+    while (sending_reqesut_size) {
+        uint64_t inflight_size_value;
+        if (likely((inflight_size_value = inflight_size.load()) <= inflight_threshold)) {
+            // std::cout << "buffer index: " <<buffer_index<<" buffer size: "<<buffers.size() << std::endl;
+            inflight_size += sending_reqesut_size;
+            // std::cout << "send size "<<sending_reqesut_size<<", inflight size after send: " <<inflight_size.load() << std::endl;
+            kassert(buffer_index < buffers.size());
+            sending_reqesut_size -= buffers[buffer_index]->zero_fill(sending_reqesut_size);
+            buffers[buffer_index]->request_id = 0;
+            // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
+            //  bl.Append(buf);
+            buffer_index++;
+        }
+    } 
+    // std::cout << "buffer index: " <<buffer_index<<" buffer size: "<<buffers.size() << std::endl;
     kassert(buffer_index == buffers.size());
     buffers.back()->request_id = m_request_id++;
     uint64_t now = Cycles::get_soft_timestamp_us();
@@ -126,7 +157,96 @@ void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
     server.send(server_addr, buffers);
 }
 
+void ChainReplicationClient::SendSmallRequestsHead() {
+    // std::cout << "sending data size" << sending_data_size << std::endl;
+    server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletionHead, this, std::placeholders::_1));
+    std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+
+    uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
+    while (true) {
+        uint64_t inflight_size_value;
+        while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
+            uint64_t sending_data_num = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize;
+            uint64_t sending_data_size = sending_data_num * kRequestSize;
+            inflight_size += sending_data_size;
+            // std::cout << "sending data size" << sending_data_size << std::endl;
+            std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+            GetBuffersByNum(buffers, sending_data_num);
+            
+            for (auto& chunk : buffers) {
+                chunk->zero_fill(kRequestSize);
+                chunk->request_id = 0;
+            }
+            buffers.back()->request_id = m_request_id++;
+            uint64_t now = Cycles::get_soft_timestamp_us();
+            m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
+
+            server.send(server_addr, buffers);
+            /*
+            now = Cycles::get_soft_timestamp_us();
+            for (auto chunk : buffers) {
+                clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::APP_SEND_AFTER, now});
+            }
+            */
+        }
+    }
+}
+
+void ChainReplicationClient::SendBigRequestsHead() {
+    // std::cout << "sending data size" << sending_data_size << std::endl;
+    server.set_txc_callback(server_addr, std::bind(&ChainReplicationClient::OnSendCompletionHead, this, std::placeholders::_1));
+    std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+
+    uint64_t inflight_threshold = (kNumRequest / 2) * static_cast<uint64_t>(kRequestSize);
+    while (true) {
+        uint64_t inflight_size_value;
+        while ((inflight_size_value = inflight_size.load()) <= inflight_threshold) {
+            uint64_t sending_data_size = (kNumRequest * static_cast<uint64_t>(kRequestSize) - inflight_size_value) / kRequestSize * kRequestSize;
+            inflight_size += sending_data_size;
+            for (int request_index = 0; request_index < sending_data_size / kRequestSize; request_index++) {
+                // std::cout << "sending data size" << sending_data_size << std::endl;
+                std::vector<Infiniband::MemoryManager::Chunk*> buffers;
+                GetBuffersBySize(buffers, kRequestSize);
+                // BufferList bl;
+                std::size_t buffer_index = 0;
+                int remainingSize = kRequestSize;
+                do {
+                    kassert(buffer_index < buffers.size());
+                    remainingSize -= buffers[buffer_index]->zero_fill(remainingSize);
+                    buffers[buffer_index]->request_id = 0;
+                    // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
+                    //  bl.Append(buf);
+                    buffer_index++;
+
+                } while (remainingSize);
+                kassert(buffer_index == buffers.size());
+                buffers.back()->request_id = m_request_id++;
+                uint64_t now = Cycles::get_soft_timestamp_us();
+                m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
+                server.send(server_addr, buffers);
+            }
+        }
+    }
+}
+
 void ChainReplicationClient::OnConnectionReadable(Connection*) { std::cout << __func__ << std::endl; }
+
+void ChainReplicationClient::OnSendCompletionHead(Infiniband::MemoryManager::Chunk* chunk) {
+    std::lock_guard<std::mutex> lock(data_lock);
+    uint64_t now = Cycles::get_soft_timestamp_us();
+    if (chunk->request_id != 0) {
+        m_client_loggger_records.Add(TimeRecordTerm{chunk->request_id, TimeRecordType::POLLED_CQE, now});
+    }
+
+    // clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
+    // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;
+
+    // std::cout << __func__ << " inflight size: " << inflight_size.load() << std::endl;
+
+    //  clientTimeRecords.Flush();
+    //   uint64_t lat = chunk_timeinfos[chunk].send_completion_time - chunk_timeinfos[chunk].post_send_time;
+    //    average_latency.Add(lat);
+}
 
 void ChainReplicationClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex> lock(data_lock);
@@ -154,12 +274,14 @@ class ChainReplicationServer {
 
     void Init();
     int Listen();
-    void Poll(Connection*);
+    void HeadPoll(Connection*);
+    void MidPoll(Connection*);
+    void TailPoll(Connection*);
     void OnConnectionWriteable(Connection*);
     void SetTransmitClient(ChainReplicationClient*);
-    static const uint32_t kRequestSize = 32768;
+    static const uint32_t kMaxRequestSize = 32768;
     static const uint32_t kMaxNumRequest = 8;
-    char recv_buffer[kRequestSize][kMaxNumRequest];
+    char recv_buffer[kMaxRequestSize][kMaxNumRequest];
     uint8_t pos;
 
    private:
@@ -168,6 +290,8 @@ class ChainReplicationServer {
     Config* rdma_config;
     Context* context;
     Server server;
+    uint32_t kRequestSize = 32768;
+    uint32_t kNumRequest = 8;
 
     entity_addr_t server_addr;
     entity_addr_t client_addr;
@@ -184,11 +308,22 @@ ChainReplicationServer::ChainReplicationServer(std::string& configFileName)
       server(context),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
-    poll_call = std::bind(&ChainReplicationServer::Poll, this, std::placeholders::_1);
+    role = context->m_rdma_config_->m_cr_role;
+    kRequestSize = context->m_rdma_config_->m_request_size;
+    kNumRequest = context->m_rdma_config_->m_request_num;
+    if (role == 0) {
+        poll_call = std::bind(&ChainReplicationServer::HeadPoll, this, std::placeholders::_1);
+    }
+    else if (role == 1) {
+        poll_call = std::bind(&ChainReplicationServer::MidPoll, this, std::placeholders::_1);
+    }
+    else {
+        poll_call = std::bind(&ChainReplicationServer::TailPoll, this, std::placeholders::_1);
+    }
     conn_writeable_callback = std::bind(&ChainReplicationServer::OnConnectionWriteable, this, std::placeholders::_1);
     server.conn_read_callback_p = &poll_call;
     server.conn_write_callback_p = &conn_writeable_callback;
-    role = context->m_rdma_config_->m_cr_role;
+    
 }
 ChainReplicationServer::~ChainReplicationServer() {
     delete rdma_config;
@@ -215,23 +350,21 @@ void ChainReplicationServer::SetTransmitClient(ChainReplicationClient* crClient)
     client = crClient;
 }
 
-void ChainReplicationServer::Poll(Connection*) {
+void ChainReplicationServer::HeadPoll(Connection*) {
     int read_len = 0;
     while (true) {
-        int rs = server.read(server_addr, recv_buffer[pos], kRequestSize);
+        int rs = server.read(server_addr, recv_buffer[pos], ACK_SIZE);
         if (likely(rs > 0)) {
             read_len += rs;
-            if (likely(read_len == kRequestSize)) {
+            // std::cout << "SERVER:: read_len is "<<read_len << std::endl;
+            if (likely(read_len == ACK_SIZE)) {
                 pos = (pos + 1) % kMaxNumRequest;
-                kassert(client->IsReady());
-                if (role == 1){
-                    client->SendRequests(kRequestSize);
-                }
-                else if (role == 2){
-                    client->SendRequests(ACK_SIZE);
-                }
-                
+                client->InflightRelease();
+                // std::cout << "SERVER:: send to mid" << std::endl;
                 read_len = 0;
+            }
+            else {
+                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
             }
         } else {
             if (rs != -EAGAIN && rs != -104) {
@@ -241,6 +374,59 @@ void ChainReplicationServer::Poll(Connection*) {
         }
     }
 }
+
+void ChainReplicationServer::MidPoll(Connection*) {
+    int read_len = 0;
+    
+    while (true) {
+        int rs = server.read(server_addr, recv_buffer[pos], kRequestSize);
+        if (likely(rs > 0)) {
+            read_len += rs;
+            // std::cout << __func__ << " READ rs:\t" << rs  << std::endl;
+            if (likely(read_len == kRequestSize)) {
+                pos = (pos + 1) % kMaxNumRequest;
+                kassert(client->IsReady());
+                client->SendRequests(kRequestSize);
+                // std::cout << "SERVER:: send to tail" << std::endl;
+                read_len = 0;
+            }
+            else {
+                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
+            }
+        } else {
+            if (rs != -EAGAIN && rs != -104) {
+                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
+                abort();
+            }
+        }
+    }
+}
+
+void ChainReplicationServer::TailPoll(Connection*) {
+    int read_len = 0;
+    while (true) {
+        int rs = server.read(server_addr, recv_buffer[pos], kRequestSize);
+        if (likely(rs > 0)) {
+            read_len += rs;
+            if (likely(read_len == kRequestSize)) {
+                pos = (pos + 1) % kMaxNumRequest;
+                kassert(client->IsReady());
+                client->SendRequests(ACK_SIZE);
+                // std::cout << "SERVER:: send to head" << std::endl;
+                read_len = 0;
+            }
+            else {
+                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
+            }
+        } else {
+            if (rs != -EAGAIN && rs != -104) {
+                std::cout << __func__ << " READ error:\t" << rs << "\t" << strerror(rs) << std::endl;
+                abort();
+            }
+        }
+    }
+}
+
 void ChainReplicationServer::OnConnectionWriteable(Connection*) { std::cout << __func__ << std::endl; }
 
 
