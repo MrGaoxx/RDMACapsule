@@ -49,8 +49,8 @@ RDMAPingPongServer::RDMAPingPongServer(std::string& configFileName)
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
     poll_call = std::bind(&RDMAPingPongServer::Poll, this, std::placeholders::_1);
     conn_writeable_callback = std::bind(&RDMAPingPongServer::OnConnectionWriteable, this, std::placeholders::_1);
-    server.conn_read_callback_p = &poll_call;
-    server.conn_write_callback_p = &conn_writeable_callback;
+    server.server_conn_read_callback_p = &poll_call;
+    server.server_conn_write_callback_p = &conn_writeable_callback;
 }
 RDMAPingPongServer::~RDMAPingPongServer() {
     delete rdma_config;

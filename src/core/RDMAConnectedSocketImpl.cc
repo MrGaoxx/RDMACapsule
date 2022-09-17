@@ -99,7 +99,7 @@ void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v) {
         wc = std::move(v);
     else
         wc.insert(wc.end(), v.begin(), v.end());
-    notify();
+    // notify();
 }
 
 void RDMAConnectedSocketImpl::get_wc(std::vector<ibv_wc> &w) {
@@ -243,14 +243,14 @@ void RDMAConnectedSocketImpl::handle_connection() {
 }
 
 ssize_t RDMAConnectedSocketImpl::read(char *buf, size_t len) {
-    eventfd_t event_val = 0;
-    int r = eventfd_read(notify_fd, &event_val);
+    // eventfd_t event_val = 0;
+    // int r = eventfd_read(notify_fd, &event_val);
     // std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
 
-    if (unlikely(r == -1 && errno != EAGAIN)) {
-        std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
-        std::cout << "READ fd FAILED: " << cpp_strerror(errno) << std::endl;
-    }
+    // if (unlikely(r == -1 && errno != EAGAIN)) {
+    //     std::cout << typeid(this).name() << " : " << __func__ << " notify_fd : " << event_val << " in " << local_qpn << " r = " << r << std::endl;
+    //     std::cout << "READ fd FAILED: " << cpp_strerror(errno) << std::endl;
+    // }
 
     if (unlikely(!active)) {
         // std::cout << typeid(this).name() << " : " << __func__ << " when ib not active. len: " << len << std::endl;

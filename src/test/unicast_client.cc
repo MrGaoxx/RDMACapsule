@@ -96,8 +96,8 @@ RDMAUnicastClient::RDMAUnicastClient(std::string& configFileName, uint8_t num_re
     kNumRequest = context->m_rdma_config_->m_request_num;
 
     readable_callback = std::bind(&RDMAUnicastClient::OnConnectionReadable, this, std::placeholders::_1);
-    server.conn_write_callback_p = &send_call;
-    server.conn_read_callback_p = &readable_callback;
+    server.client_conn_write_callback_p = &send_call;
+    server.client_conn_read_callback_p = &readable_callback;
     clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "client.log");
     unicast_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "unicast_client.log");
 

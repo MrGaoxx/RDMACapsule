@@ -36,8 +36,11 @@ class Server {
 
     virtual NetworkStack *get_network_stack() { return stack.get(); }
     virtual RDMAStack *get_rdma_stack() { return reinterpret_cast<RDMAStack *>(stack.get()); }
-    std::function<void(Connection *)> *conn_read_callback_p;
-    std::function<void(Connection *)> *conn_write_callback_p;
+    std::function<void(Connection *)> *client_conn_read_callback_p;
+    std::function<void(Connection *)> *client_conn_write_callback_p;
+
+    std::function<void(Connection *)> *server_conn_read_callback_p;
+    std::function<void(Connection *)> *server_conn_write_callback_p;
 
    protected:
     std::shared_ptr<NetworkStack> stack;

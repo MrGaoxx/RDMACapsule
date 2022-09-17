@@ -559,8 +559,8 @@ void RDMADispatcher::post_tx_buffer(std::vector<Chunk *> &chunks) {
 }
 
 void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
-    perf_logger->inc(l_msgr_rdma_rx_total_wc, rx_number);
-    perf_logger->inc(l_msgr_rdma_rx_bufs_in_use, rx_number);
+    // perf_logger->inc(l_msgr_rdma_rx_total_wc, rx_number);
+    // perf_logger->inc(l_msgr_rdma_rx_bufs_in_use, rx_number);
 
     std::map<RDMAConnectedSocketImpl *, std::vector<ibv_wc> > polled;
     std::lock_guard l{lock};  // make sure connected socket alive when pass wc
@@ -578,7 +578,7 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {
                     std::cout << typeid(this).name() << " : " << __func__ << " csi with qpn " << response->qp_num << " may be dead. chunk 0x"
                               << std::hex << chunk << " will be back." << std::dec << std::endl;
                     ib->recall_chunk_to_pool(chunk);
-                    perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
+                    // perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
                 } else {
                     conn->post_chunks_to_rq(1);
                     polled[conn].push_back(*response);

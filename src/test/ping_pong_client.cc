@@ -72,8 +72,8 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
         send_call = std::bind(&RDMAPingPongClient::SendSmallRequests, this, std::placeholders::_1);
     }
     readable_callback = std::bind(&RDMAPingPongClient::OnConnectionReadable, this, std::placeholders::_1);
-    server.conn_write_callback_p = &send_call;
-    server.conn_read_callback_p = &readable_callback;
+    server.client_conn_write_callback_p = &send_call;
+    server.client_conn_read_callback_p = &readable_callback;
     clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
     m_client_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client_request.log");
     m_logger_rpc.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client_rpc_throughput.log");
