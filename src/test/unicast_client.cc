@@ -80,6 +80,9 @@ class RDMAUnicastClient {
 
     Logger unicast_logger;
     LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> client_unicast_records;
+    static const uint32_t kClientRequestMaxRecordTime = 8192;
+    Logger m_logger_rpc;
+    TimeAverageLoggerTerm<uint64_t> m_client_loggger_records_rpc;
 
     uint8_t num_ready = 0;
 };
@@ -91,15 +94,17 @@ RDMAUnicastClient::RDMAUnicastClient(std::string& configFileName, uint8_t num_re
       kNumReplicas(num_replicas),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0),
       request_ack_counter(num_replicas),
-      client_unicast_records("RequestTimeRecord", kUnicastMaxRecordTime, &unicast_logger) {
+      client_unicast_records("RequestTimeRecord", kUnicastMaxRecordTime, &unicast_logger),
+      m_client_loggger_records_rpc("TX_BW", TX_LOG_INTERVAL, &m_logger_rpc) {
     kRequestSize = context->m_rdma_config_->m_request_size;
     kNumRequest = context->m_rdma_config_->m_request_num;
 
     readable_callback = std::bind(&RDMAUnicastClient::OnConnectionReadable, this, std::placeholders::_1);
     server.client_conn_write_callback_p = &send_call;
     server.client_conn_read_callback_p = &readable_callback;
-    clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "client.log");
+    // clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "client.log");
     unicast_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::rdtsc()) + "unicast_client.log");
+    m_logger_rpc.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "unicast_client_rpc_throughput.log");
 
     data = new char[kRequestSize];
 
@@ -115,7 +120,11 @@ RDMAUnicastClient::RDMAUnicastClient(std::string& configFileName, uint8_t num_re
     }
 }
 
-void RDMAUnicastClient::Init() { server.start(); }
+void RDMAUnicastClient::Init() { 
+    server.start(); 
+    m_client_loggger_records_rpc.Start();
+}
+
 Connection* RDMAUnicastClient::Connect(const char* serverAddr, uint8_t index) {
     kassert(index < kNumReplicas);
     client_addr.set_addr(rdma_config->m_ip_addr.c_str(), rdma_config->m_listen_port);
@@ -278,6 +287,7 @@ void RDMAUnicastClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk
         bool r = request_ack_counter.Increase(request_id);
         if (r) {
             client_unicast_records.Add(TimeRecordTerm{request_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
+            m_client_loggger_records_rpc.Add(chunk->get_offset());
             inflight_size -= kRequestSize;
         }
     }

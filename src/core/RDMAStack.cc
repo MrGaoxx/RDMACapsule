@@ -537,7 +537,7 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n) {
         }
     }
 
-    perf_logger->inc(l_msgr_rdma_tx_total_wc, n);
+    // perf_logger->inc(l_msgr_rdma_tx_total_wc, n);
     post_tx_buffer(tx_chunks);
 }
 
@@ -558,7 +558,7 @@ void RDMADispatcher::post_tx_buffer(std::vector<Chunk *> &chunks) {
     inflight -= chunks.size();
     ib->get_memory_manager()->return_tx(chunks);
     // std::cout << typeid(this).name() << " : " << __func__ << " release " << chunks.size() << " chunks, inflight " << inflight << std::endl;
-    notify_pending_workers();
+    // notify_pending_workers();
 }
 
 void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number) {

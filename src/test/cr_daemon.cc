@@ -85,7 +85,9 @@ ChainReplicationClient::ChainReplicationClient(std::string& configFileName)
     server.client_conn_write_callback_p = &send_call;
     server.client_conn_read_callback_p = &readable_callback;
     // clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
-    m_client_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client_request.log");
+    m_client_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "cr_client_request.log");
+    m_logger_rpc.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "cr_client_rpc_throughput.log");
+
     data = new char[kRequestSize];
 }
 
@@ -165,6 +167,8 @@ void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
     kassert(buffer_index == buffers.size());
     buffers.back()->request_id = m_request_id++;
     server.send(server_addr, buffers);
+    // std::cout << "server_addr: " <<server_addr << std::endl;
+
 }
 
 void ChainReplicationClient::FinishTimeLog() {
@@ -207,12 +211,7 @@ void ChainReplicationClient::SendSmallRequestsHead() {
             // std::cout << "sending request " << buffers.back()->request_id << std::endl;
 
             server.send(server_addr, buffers);
-            /*
-            now = Cycles::get_soft_timestamp_us();
-            for (auto chunk : buffers) {
-                clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::APP_SEND_AFTER, now});
-            }
-            */
+            // std::cout << "server_addr: " <<server_addr << std::endl;
         }
     }
 }
@@ -255,6 +254,7 @@ void ChainReplicationClient::SendBigRequestsHead() {
                 uint64_t now = Cycles::get_soft_timestamp_us();
                 m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
                 server.send(server_addr, buffers);
+                // std::cout << "server_addr: " <<server_addr << std::endl;
             }
         }
     }
@@ -264,12 +264,8 @@ void ChainReplicationClient::OnConnectionReadable(Connection*) { std::cout << __
 
 void ChainReplicationClient::OnSendCompletionHead(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex> lock(data_lock);
-    kassert(inflight_size.load() >= chunk->get_offset());
-    inflight_size -= chunk->get_offset();
-    uint64_t now = Cycles::get_soft_timestamp_us();
-    if (chunk->request_id != 0) {
-        m_client_loggger_records.Add(TimeRecordTerm{chunk->request_id, TimeRecordType::POLLED_CQE, now});
-    }
+    // kassert(inflight_size.load() >= chunk->get_offset());
+    // inflight_size -= chunk->get_offset();
 
     // clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
     // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;
@@ -406,10 +402,11 @@ void ChainReplicationServer::HeadPoll() {
         if (likely(rs > 0)) {
             read_len += rs;
             while (read_len >= ACK_SIZE) {
-                // std::cout << "SERVER:: send to mid, read len: "<<read_len << std::endl;
+                // std::cout << "SERVER:: ACK found, read len: "<<read_len << std::endl;
 
                 // kassert(client->IsReady());
                 client->FinishTimeLog();
+                client->InflightRelease();
                 // std::cout << "SERVER:: send to mid" << std::endl;
                 read_len -= ACK_SIZE;
                 

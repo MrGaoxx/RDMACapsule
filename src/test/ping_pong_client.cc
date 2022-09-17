@@ -74,7 +74,7 @@ RDMAPingPongClient::RDMAPingPongClient(std::string& configFileName)
     readable_callback = std::bind(&RDMAPingPongClient::OnConnectionReadable, this, std::placeholders::_1);
     server.client_conn_write_callback_p = &send_call;
     server.client_conn_read_callback_p = &readable_callback;
-    clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
+    // clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
     m_client_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client_request.log");
     m_logger_rpc.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client_rpc_throughput.log");
     data = new char[kRequestSize];
@@ -135,7 +135,7 @@ void RDMAPingPongClient::SendSmallRequests(Connection*) {
             uint64_t now = Cycles::get_soft_timestamp_us();
             for (auto& chunk : buffers) {
                 chunk->zero_fill(kRequestSize);
-                m_client_loggger_records.Add(TimeRecordTerm{chunk->request_id, TimeRecordType::POST_SEND, now});
+                m_client_loggger_records.Add(TimeRecordTerm{m_request_id, TimeRecordType::POST_SEND, now});
                 chunk->request_id = m_request_id++;
             }
             server.send(server_addr, buffers);
@@ -187,9 +187,9 @@ void RDMAPingPongClient::SendBigRequests(Connection*) {
 
                 } while (remainingSize);
                 kassert(buffer_index == buffers.size());
+                m_client_loggger_records.Add(TimeRecordTerm{m_request_id, TimeRecordType::POST_SEND, now});
                 buffers.back()->request_id = m_request_id++;
                 uint64_t now = Cycles::get_soft_timestamp_us();
-                m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
                 server.send(server_addr, buffers);
             }
         }
@@ -205,7 +205,7 @@ void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chun
     uint64_t now = Cycles::get_soft_timestamp_us();
     if (chunk->request_id != 0) {
         m_client_loggger_records.Add(TimeRecordTerm{chunk->request_id, TimeRecordType::POLLED_CQE, now});
-        m_client_loggger_records_rpc.Add(kRequestSize);
+        m_client_loggger_records_rpc.Add(chunk->get_offset());
     }
     // clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
     // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;
