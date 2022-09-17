@@ -61,7 +61,10 @@ class ChainReplicationClient {
 
     static const uint32_t kClientRequestMaxRecordTime = 8192;
     Logger m_client_logger;
+    Logger m_logger_rpc;
     LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> m_client_loggger_records;
+    TimeAverageLoggerTerm<uint64_t> m_client_loggger_records_rpc;
+
     bool ready;
 };
 
@@ -72,6 +75,7 @@ ChainReplicationClient::ChainReplicationClient(std::string& configFileName)
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0),
       m_client_loggger_records("RequestTimeRecord", kClientRequestMaxRecordTime, &m_client_logger),
+      m_client_loggger_records_rpc("TX_BW", TX_LOG_INTERVAL, &m_logger_rpc),
       ready(false) {
     kRequestSize = context->m_rdma_config_->m_request_size;
     kNumRequest = context->m_rdma_config_->m_request_num;
@@ -85,7 +89,10 @@ ChainReplicationClient::ChainReplicationClient(std::string& configFileName)
     data = new char[kRequestSize];
 }
 
-void ChainReplicationClient::Init() { server.start(); }
+void ChainReplicationClient::Init() { 
+    server.start(); 
+    m_client_loggger_records_rpc.Start();
+}
 Connection* ChainReplicationClient::Connect(const char* serverAddr) {
     client_addr.set_addr(rdma_config->m_ip_addr.c_str(), rdma_config->m_listen_port);
     server_addr.set_addr(serverAddr, rdma_config->m_listen_port);
@@ -148,7 +155,7 @@ void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
             // std::cout << "send size "<<sending_reqesut_size<<", inflight size after send: " <<inflight_size.load() << std::endl;
             kassert(buffer_index < buffers.size());
             sending_reqesut_size -= buffers[buffer_index]->zero_fill(sending_reqesut_size);
-            buffers[buffer_index]->request_id = 0;
+            // buffers[buffer_index]->request_id = 0;
             // Buffer buf(buffers[buffer_index]->buffer, buffers[buffer_index]->get_offset());
             //  bl.Append(buf);
             buffer_index++;
@@ -162,7 +169,10 @@ void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
 
 void ChainReplicationClient::FinishTimeLog() {
     uint64_t now = Cycles::get_soft_timestamp_us();
+    // std::cout << "finish request " <<m_receive_id << std::endl;
+
     m_client_loggger_records.Add(TimeRecordTerm{m_receive_id++, TimeRecordType::POLLED_CQE, now});
+    m_client_loggger_records_rpc.Add(kRequestSize);
 } 
  
 void ChainReplicationClient::SendSmallRequestsHead() {
@@ -187,13 +197,14 @@ void ChainReplicationClient::SendSmallRequestsHead() {
             std::vector<Infiniband::MemoryManager::Chunk*> buffers;
             GetBuffersByNum(buffers, sending_data_num);
             
+            uint64_t now = Cycles::get_soft_timestamp_us();
             for (auto& chunk : buffers) {
                 chunk->zero_fill(kRequestSize);
-                chunk->request_id = 0;
+                m_client_loggger_records.Add(TimeRecordTerm{m_request_id, TimeRecordType::POST_SEND, now});
+                chunk->request_id = m_request_id++;
             }
-            buffers.back()->request_id = m_request_id++;
-            uint64_t now = Cycles::get_soft_timestamp_us();
-            m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
+            
+            // std::cout << "sending request " << buffers.back()->request_id << std::endl;
 
             server.send(server_addr, buffers);
             /*

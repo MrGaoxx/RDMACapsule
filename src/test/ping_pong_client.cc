@@ -135,8 +135,8 @@ void RDMAPingPongClient::SendSmallRequests(Connection*) {
             uint64_t now = Cycles::get_soft_timestamp_us();
             for (auto& chunk : buffers) {
                 chunk->zero_fill(kRequestSize);
-                chunk->request_id = m_request_id++;
                 m_client_loggger_records.Add(TimeRecordTerm{chunk->request_id, TimeRecordType::POST_SEND, now});
+                chunk->request_id = m_request_id++;
             }
             server.send(server_addr, buffers);
             /*
