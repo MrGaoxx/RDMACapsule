@@ -32,6 +32,7 @@ class ChainReplicationClient {
     bool IsReady() { return ready; }
     std::function<void(Connection*)> send_call;
     void InflightRelease();
+    void FinishTimeLog();
     Server* getRDMAServer();
 
    private:
@@ -56,6 +57,7 @@ class ChainReplicationClient {
     std::atomic<uint64_t> inflight_size = 0;
     std::atomic<uint64_t> num_inflight_chunk = 0;
     uint64_t m_request_id = 0;
+    uint64_t m_receive_id = 0;
 
     static const uint32_t kClientRequestMaxRecordTime = 8192;
     Logger m_client_logger;
@@ -131,8 +133,6 @@ void ChainReplicationClient::InflightRelease() {
 
 
 void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
-    
-    
     std::vector<Infiniband::MemoryManager::Chunk*> buffers;
 
     GetBuffersBySize(buffers, sending_reqesut_size);
@@ -144,6 +144,7 @@ void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
         if (likely((inflight_chunk_value = num_inflight_chunk.load()) < TX_QUEUE_LEN)) {
             // std::cout << "buffer index: " <<buffer_index<<" buffer size: "<<buffers.size() << std::endl;
             num_inflight_chunk += 1;
+            // std::cout << __func__ << " inflight chunk: " << num_inflight_chunk.load() << std::endl;
             // std::cout << "send size "<<sending_reqesut_size<<", inflight size after send: " <<inflight_size.load() << std::endl;
             kassert(buffer_index < buffers.size());
             sending_reqesut_size -= buffers[buffer_index]->zero_fill(sending_reqesut_size);
@@ -156,11 +157,14 @@ void ChainReplicationClient::SendRequests(uint32_t sending_reqesut_size) {
     // std::cout << "buffer index: " <<buffer_index<<" buffer size: "<<buffers.size() << std::endl;
     kassert(buffer_index == buffers.size());
     buffers.back()->request_id = m_request_id++;
-    uint64_t now = Cycles::get_soft_timestamp_us();
-    m_client_loggger_records.Add(TimeRecordTerm{buffers.back()->request_id, TimeRecordType::POST_SEND, now});
     server.send(server_addr, buffers);
 }
 
+void ChainReplicationClient::FinishTimeLog() {
+    uint64_t now = Cycles::get_soft_timestamp_us();
+    m_client_loggger_records.Add(TimeRecordTerm{m_receive_id++, TimeRecordType::POLLED_CQE, now});
+} 
+ 
 void ChainReplicationClient::SendSmallRequestsHead() {
     std::vector<Infiniband::MemoryManager::Chunk*> buffers;
     cpu_set_t mask;                                     // cpu核的集合
@@ -249,6 +253,8 @@ void ChainReplicationClient::OnConnectionReadable(Connection*) { std::cout << __
 
 void ChainReplicationClient::OnSendCompletionHead(Infiniband::MemoryManager::Chunk* chunk) {
     std::lock_guard<std::mutex> lock(data_lock);
+    kassert(inflight_size.load() >= chunk->get_offset());
+    inflight_size -= chunk->get_offset();
     uint64_t now = Cycles::get_soft_timestamp_us();
     if (chunk->request_id != 0) {
         m_client_loggger_records.Add(TimeRecordTerm{chunk->request_id, TimeRecordType::POLLED_CQE, now});
@@ -267,6 +273,8 @@ void ChainReplicationClient::OnSendCompletionHead(Infiniband::MemoryManager::Chu
 void ChainReplicationClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk) {
     kassert(num_inflight_chunk.load() >= 1);
     num_inflight_chunk -= 1;
+    // std::cout << __func__ << " inflight chunk: " << num_inflight_chunk.load() << std::endl;
+
 }
 
 class ChainReplicationServer {
@@ -296,6 +304,7 @@ class ChainReplicationServer {
     Server* server;
     uint32_t kRequestSize = 32768;
     uint32_t kNumRequest = 8;
+    uint16_t used_flag = 0;
 
     entity_addr_t server_addr;
     entity_addr_t client_addr;
@@ -352,6 +361,11 @@ void ChainReplicationServer::SetTransmitClient(ChainReplicationClient* crClient)
 }
 
 void ChainReplicationServer::StartPollThread(Connection*) {
+    
+    if (used_flag) {
+        return;
+    }
+    used_flag = 1;
     if (role == 0) {
         t_poll = std::thread(&ChainReplicationServer::HeadPoll, this);
     }
@@ -381,12 +395,14 @@ void ChainReplicationServer::HeadPoll() {
         if (likely(rs > 0)) {
             read_len += rs;
             while (read_len >= ACK_SIZE) {
-                kassert(client->IsReady());
-                client->InflightRelease();
+                // std::cout << "SERVER:: send to mid, read len: "<<read_len << std::endl;
+
+                // kassert(client->IsReady());
+                client->FinishTimeLog();
                 // std::cout << "SERVER:: send to mid" << std::endl;
                 read_len -= ACK_SIZE;
                 
-                pos = (pos + 1) % kMaxNumRequest;
+                // pos = (pos + 1) % kMaxNumRequest;
             }
         } else {
             if (rs != -EAGAIN && rs != -104) {
@@ -414,12 +430,13 @@ void ChainReplicationServer::MidPoll() {
             read_len += rs;
             // std::cout << __func__ << " READ rs:\t" << rs  << std::endl;
             while (read_len >= kRequestSize && client->IsReady()) {
-                kassert(client->IsReady());
+                // std::cout << "SERVER:: send to tail, read len: "<<read_len << std::endl;
+                // kassert(client->IsReady());
                 client->SendRequests(kRequestSize);
                 // std::cout << "SERVER:: send to , read len: "<<read_len << std::endl;
                 read_len -= kRequestSize;
                 
-                pos = (pos + 1) % kMaxNumRequest;
+                // pos = (pos + 1) % kMaxNumRequest;
             }
         } else {
             if (rs != -EAGAIN && rs != -104) {
@@ -440,7 +457,7 @@ void ChainReplicationServer::TailPoll() {
     {
         std::cout << "warning: could not set CPU affinity, continuing...\n" << std::endl;
     }
-    
+
     while (true) {
         int rs = server->read(server_addr, recv_buffer[pos], kMaxBufferSize);
         if (likely(rs > 0)) {
@@ -448,12 +465,12 @@ void ChainReplicationServer::TailPoll() {
             // std::cout << __func__ << " READ rs:\t" << rs  << std::endl;
             while (read_len >= kRequestSize && client->IsReady()) {
                 // std::cout << "SERVER:: send to head, read len: "<<read_len << std::endl;
-                kassert(client->IsReady());
+                // kassert(client->IsReady());
                 client->SendRequests(ACK_SIZE);
                 // std::cout << "SERVER:: send to head, request size"<<kRequestSize << std::endl;
                 read_len -= kRequestSize;
                 
-                pos = (pos + 1) % kMaxNumRequest;
+                // pos = (pos + 1) % kMaxNumRequest;
             }
         } else {
             if (rs != -EAGAIN && rs != -104) {

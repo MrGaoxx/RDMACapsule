@@ -246,7 +246,7 @@ int RDMADispatcher::post_chunks_to_rq(int num, QueuePair *qp) {
 }
 
 void RDMADispatcher::polling() {
-    static int MAX_COMPLETIONS = 32;
+    static int MAX_COMPLETIONS = 8;
     ibv_wc wc[MAX_COMPLETIONS];
 
     std::map<RDMAConnectedSocketImpl *, std::vector<ibv_wc> > polled;
@@ -266,17 +266,20 @@ void RDMADispatcher::polling() {
     }
 
     while (true) {
-        int rx_ret = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
-        if (likely(rx_ret > 0)) {
-            // std::cout << typeid(this).name() << " : " << __func__ << " rx completion queue got " << rx_ret << " responses." << std::endl;
-            handle_rx_event(wc, rx_ret);
-        }
 
         int tx_ret = tx_cq->poll_cq(MAX_COMPLETIONS, wc);
         if (tx_ret > 0) {
             // std::cout << typeid(this).name() << " : " << __func__ << " tx completion queue got " << tx_ret << " responses." << std::endl;
             handle_tx_event(wc, tx_ret);
         }
+
+
+        int rx_ret = rx_cq->poll_cq(MAX_COMPLETIONS, wc);
+        if (likely(rx_ret > 0)) {
+            // std::cout << typeid(this).name() << " : " << __func__ << " rx completion queue got " << rx_ret << " responses." << std::endl;
+            handle_rx_event(wc, rx_ret);
+        }
+
 
         if (unlikely(!tx_ret && !rx_ret)) {
             perf_logger->set(l_msgr_rdma_inflight_tx_chunks, inflight);
