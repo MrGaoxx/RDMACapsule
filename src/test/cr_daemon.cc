@@ -61,9 +61,9 @@ class ChainReplicationClient {
 
     static const uint32_t kClientRequestMaxRecordTime = 8192;
     Logger m_client_logger;
-    Logger m_logger_rpc;
+    
     LockedOriginalLoggerTerm<TimeRecords, TimeRecordTerm> m_client_loggger_records;
-    TimeAverageLoggerTerm<uint64_t> m_client_loggger_records_rpc;
+    
 
     bool ready;
 };
@@ -75,7 +75,6 @@ ChainReplicationClient::ChainReplicationClient(std::string& configFileName)
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0),
       m_client_loggger_records("RequestTimeRecord", kClientRequestMaxRecordTime, &m_client_logger),
-      m_client_loggger_records_rpc("TX_BW", TX_LOG_INTERVAL, &m_logger_rpc),
       ready(false) {
     kRequestSize = context->m_rdma_config_->m_request_size;
     kNumRequest = context->m_rdma_config_->m_request_num;
@@ -86,14 +85,12 @@ ChainReplicationClient::ChainReplicationClient(std::string& configFileName)
     server.client_conn_read_callback_p = &readable_callback;
     // clientLogger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "client.log");
     m_client_logger.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "cr_client_request.log");
-    m_logger_rpc.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "cr_client_rpc_throughput.log");
 
     data = new char[kRequestSize];
 }
 
 void ChainReplicationClient::Init() { 
     server.start(); 
-    m_client_loggger_records_rpc.Start();
 }
 Connection* ChainReplicationClient::Connect(const char* serverAddr) {
     client_addr.set_addr(rdma_config->m_ip_addr.c_str(), rdma_config->m_listen_port);
@@ -176,7 +173,7 @@ void ChainReplicationClient::FinishTimeLog() {
     // std::cout << "finish request " <<m_receive_id << std::endl;
 
     m_client_loggger_records.Add(TimeRecordTerm{m_receive_id++, TimeRecordType::POLLED_CQE, now});
-    m_client_loggger_records_rpc.Add(kRequestSize);
+    // std::cout << "rpc add size " <<kRequestSize << std::endl;
 } 
  
 void ChainReplicationClient::SendSmallRequestsHead() {
@@ -319,6 +316,9 @@ class ChainReplicationServer {
     std::function<void(Connection*)> conn_writeable_callback;
     ChainReplicationClient* client;
     std::thread t_poll;
+
+    Logger m_logger_rpc;
+    TimeAverageLoggerTerm<uint64_t> m_client_loggger_records_rpc;
 };
 
 ChainReplicationServer::ChainReplicationServer(std::string& configFileName)
@@ -327,6 +327,7 @@ ChainReplicationServer::ChainReplicationServer(std::string& configFileName)
       rdma_config(new Config(configFileName)),
       context(new Context(rdma_config)),
       server(nullptr),
+      m_client_loggger_records_rpc("TX_BW", TX_LOG_INTERVAL, &m_logger_rpc),
       server_addr(entity_addr_t::type_t::TYPE_SERVER, 0),
       client_addr(entity_addr_t::type_t::TYPE_CLIENT, 0) {
     role = context->m_rdma_config_->m_cr_role;
@@ -336,13 +337,18 @@ ChainReplicationServer::ChainReplicationServer(std::string& configFileName)
 
     conn_writeable_callback = std::bind(&ChainReplicationServer::OnConnectionWriteable, this, std::placeholders::_1);
     // server.conn_read_callback_p = &poll_call;
+    m_logger_rpc.SetLoggerName("/dev/shm/" + std::to_string(Cycles::get_soft_timestamp_us()) + "cr_client_rpc_throughput.log");
+
     
 }
 ChainReplicationServer::~ChainReplicationServer() {
     delete rdma_config;
     delete context;
 }
-void ChainReplicationServer::Init() {  server->start();}
+void ChainReplicationServer::Init() {  
+    server->start();
+    m_client_loggger_records_rpc.Start();
+}
 
 int ChainReplicationServer::Listen() {
     if (unlikely(listening)) {
@@ -407,6 +413,7 @@ void ChainReplicationServer::HeadPoll() {
                 // kassert(client->IsReady());
                 client->FinishTimeLog();
                 client->InflightRelease();
+                m_client_loggger_records_rpc.Add(kRequestSize);
                 // std::cout << "SERVER:: send to mid" << std::endl;
                 read_len -= ACK_SIZE;
                 
