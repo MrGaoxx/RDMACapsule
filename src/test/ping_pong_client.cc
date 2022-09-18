@@ -187,9 +187,9 @@ void RDMAPingPongClient::SendBigRequests(Connection*) {
 
                 } while (remainingSize);
                 kassert(buffer_index == buffers.size());
+                uint64_t now = Cycles::get_soft_timestamp_us();
                 m_client_loggger_records.Add(TimeRecordTerm{m_request_id, TimeRecordType::POST_SEND, now});
                 buffers.back()->request_id = m_request_id++;
-                uint64_t now = Cycles::get_soft_timestamp_us();
                 server.send(server_addr, buffers);
             }
         }
@@ -205,7 +205,7 @@ void RDMAPingPongClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chun
     uint64_t now = Cycles::get_soft_timestamp_us();
     if (chunk->request_id != 0) {
         m_client_loggger_records.Add(TimeRecordTerm{chunk->request_id, TimeRecordType::POLLED_CQE, now});
-        m_client_loggger_records_rpc.Add(chunk->get_offset());
+        m_client_loggger_records_rpc.Add(kRequestSize);
     }
     // clientTimeRecords.Add(TimeRecordTerm{chunk->my_log_id, TimeRecordType::SEND_CB, Cycles::get_soft_timestamp_us()});
     // std::cout << __func__ << "removing inflight size" << chunk->get_offset() << std::endl;

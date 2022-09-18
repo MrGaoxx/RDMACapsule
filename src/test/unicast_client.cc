@@ -287,7 +287,7 @@ void RDMAUnicastClient::OnSendCompletion(Infiniband::MemoryManager::Chunk* chunk
         bool r = request_ack_counter.Increase(request_id);
         if (r) {
             client_unicast_records.Add(TimeRecordTerm{request_id, TimeRecordType::POLLED_CQE, Cycles::get_soft_timestamp_us()});
-            m_client_loggger_records_rpc.Add(chunk->get_offset());
+            m_client_loggger_records_rpc.Add(kRequestSize);
             inflight_size -= kRequestSize;
         }
     }
