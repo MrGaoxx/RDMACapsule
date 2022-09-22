@@ -406,7 +406,7 @@ inline std::ostream& operator<<(std::ostream& os, TimeRecords& trs) {
             os << " " << record.second[i];
         }
         latency = record.second[3] - record.second[1];
-        if (latency > 0 && latency < 1000) {
+        if (latency > 0 && latency < 10000) {
             latency_sum += latency;
             nums++;
         }

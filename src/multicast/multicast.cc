@@ -1,7 +1,7 @@
 #include "multicast/multicast.h"
 
 //
-MulticastDaemon::MulticastDaemon(Context *c) : Server(c), m_mc_id((((c->m_rdma_config_->m_addr.in4_addr().sin_addr.s_addr) << 12) + rand()) % 20000) {
+MulticastDaemon::MulticastDaemon(Context *c) : Server(c), m_mc_id((((c->m_rdma_config_->m_addr.in4_addr().sin_addr.s_addr) << 12) + rand()) % 10000) {
     // multicast_map[entity_addr_t("172.16.0.11", 30000)] = 1;
     // multicast_addrs[mc_id] = {entity_addr_t("172.16.0.15", 30000), entity_addr_t("172.16.0.16", 30000)};
     // mc_id++;
@@ -9,6 +9,8 @@ MulticastDaemon::MulticastDaemon(Context *c) : Server(c), m_mc_id((((c->m_rdma_c
     mc_client_conn_write_callback = std::bind(&MulticastDaemon::process_client_writeable, this, std::placeholders::_1);
     mc_server_conn_read_callback = std::bind(&MulticastDaemon::process_server_readable, this, std::placeholders::_1);
     mc_server_conn_write_callback = std::bind(&MulticastDaemon::process_server_writeable, this, std::placeholders::_1);
+    srand(Cycles::get_soft_timestamp_us());
+    m_mc_id = (((c->m_rdma_config_->m_addr.in4_addr().sin_addr.s_addr) << 12) + rand()) % 10000;
     {
         std::cout << "Switch address is " << p4_writter.get_switch_addr() << std::endl;
         // p4_writter.init_switch_table();
